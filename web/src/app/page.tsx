@@ -2,6 +2,7 @@
 
 import { useRef, useState } from "react";
 import Image from "next/image";
+import Link from "next/link";
 
 const PRESETS = [
   { title: "水墨山水", sub: "主峰·皴法·留白", img: "/presets/ink.png" },
@@ -94,6 +95,15 @@ export default function Home() {
       )}
 
       <div className="relative z-10 mx-auto flex h-full max-w-3xl flex-col items-center justify-center px-6">
+        {/* 顶栏：项目入口 */}
+        <Link
+          href="/projects"
+          className="fade-up absolute right-6 top-6 rounded-full border border-border bg-card/60 px-4 py-1.5 text-xs text-foreground/60 backdrop-blur transition hover:border-foreground/25 hover:text-foreground"
+          style={{ animationDelay: "0.1s" }}
+        >
+          项目 →
+        </Link>
+
         {/* 若隐若现孔雀翎 */}
         <div className="fade-up mb-5" style={{ animationDelay: "0.05s" }}>
           <Feather />
