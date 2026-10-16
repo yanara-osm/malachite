@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>孔雀翎 Malachite</title>
+<style>
+  :root {
+    --bg: #0b0b0c;
+    --panel: #101012;
+    --raise: #161619;
+    --line: #1e1e22;
+    --txt: #ededed;
+    --txt2: #9c9ca4;
+    --txt3: #5e5e66;
+    --gold: #e3b34c;
+    --gold-soft: rgba(227,179,76,.13);
+    --ok: #6fbf8f;
+    --bad: #d47a6e;
+    --mono: "Cascadia Code", Consolas, monospace;
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { background:var(--bg); color:var(--txt); font:13px/1.6 -apple-system,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif; height:100vh; overflow:hidden; display:flex; flex-direction:column; -webkit-font-smoothing:antialiased; }
+
+  /* ── 顶栏：留空，只放身份与入口 ── */
+  header { height:50px; flex:none; display:flex; align-items:center; gap:16px; padding:0 18px; border-bottom:1px solid var(--line); }
+  .logo { display:flex; align-items:center; gap:8px; user-select:none; }
+  .logo .pt { width:7px; height:7px; border-radius:50%; background:var(--gold); box-shadow:0 0 10px rgba(227,179,76,.5); }
+  .logo b { font-size:13px; font-weight:600; letter-spacing:1.5px; }
+  .proj { font-size:12px; color:var(--txt2); }
+  .proj b { color:var(--txt); font-weight:500; }
+  /* 智能体入口（Runway 式：prompt 是主角） */
+  .ask { flex:1; max-width:480px; margin:0 auto; height:32px; border-radius:16px; background:var(--raise); display:flex; align-items:center; padding:0 4px 0 14px; gap:10px; border:1px solid transparent; transition:all .18s; }
+  .ask:hover { border-color:var(--line); }
+  .ask:focus-within { border-color:#45454d; background:#19191c; }
+  .ask svg { flex:none; opacity:.5; }
+  .ask input { flex:1; background:none; border:none; outline:none; color:var(--txt); font-size:12.5px; }
+  .ask input::placeholder { color:var(--txt3); }
+  .ask .go { height:22px; padding:0 13px; border-radius:11px; border:none; background:var(--gold); color:#0b0b0c; font-size:11px; font-weight:600; cursor:pointer; }
+  .ask .go:hover { opacity:.85; }
+  .hright { margin-left:auto; display:flex; align-items:center; gap:14px; }
+  .status { font-size:11px; color:var(--txt3); display:flex; align-items:center; gap:6px; }
+  .status i { width:6px; height:6px; border-radius:50%; background:var(--ok); }
+  .avatar { width:26px; height:26px; border-radius:50%; background:linear-gradient(135deg,#3c3c44,#1c1c20); }
+
+  /* ── 三栏 ── */
+  main { flex:1; display:grid; grid-template-columns:264px 1fr 304px; min-height:0; }
+
+  /* ── 左：版本流（Runway 式：纵向迭代，最新在下） ── */
+  .versions { border-right:1px solid var(--line); background:var(--panel); display:flex; flex-direction:column; min-height:0; }
+  .pane-h { padding:14px 16px 10px; font-size:11px; color:var(--txt3); letter-spacing:1.5px; display:flex; justify-content:space-between; align-items:center; }
+  .pane-h .cnt { font-family:var(--mono); font-size:10px; letter-spacing:0; }
+  .v-list { flex:1; overflow-y:auto; padding:0 12px 16px; display:flex; flex-direction:column; gap:8px; }
+  .v { display:flex; gap:10px; padding:9px; border-radius:10px; border:1px solid transparent; cursor:pointer; transition:all .14s; }
+  .v:hover { background:var(--raise); }
+  .v.active { background:var(--raise); border-color:#3a3a42; }
+  .v.active .vt { color:var(--gold); }
+  .v .th { width:64px; height:44px; border-radius:6px; flex:none; overflow:hidden; border:1px solid var(--line); position:relative; }
+  .v .th img { width:100%; height:100%; object-fit:cover; display:block; }
+  .v .info { flex:1; min-width:0; display:flex; flex-direction:column; justify-content:center; }
+  .v .vt { font-size:12.5px; font-weight:500; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .v .vm { font-size:10.5px; color:var(--txt3); font-family:var(--mono); margin-top:2px; }
+  .v .who { position:absolute; top:4px; left:4px; font-size:9px; padding:1px 5px; border-radius:6px; background:rgba(11,11,12,.8); color:var(--gold); }
+  .v .who.h { color:#8fb8dd; }
+  .v.pending { opacity:.45; }
+  .v .badge { font-size:10px; color:var(--gold); }
+
+  /* ── 中：画布当主角（Figma 式：顶部留空，工具栏沉底浮动） ── */
+  .canvas-wrap { position:relative; display:flex; flex-direction:column; min-height:0; }
+  .stage { flex:1; position:relative; display:grid; place-items:center; min-height:0; }
+  .artboard { position:relative; width:min(64%, 820px); aspect-ratio:3/2; border-radius:4px; overflow:hidden; box-shadow:0 24px 80px rgba(0,0,0,.55); }
+  .artboard img { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; display:block; }
+  .artboard .after { clip-path:inset(0 0 0 50%); }
+  .vline { position:absolute; top:0; bottom:0; left:50%; width:1px; background:rgba(227,179,76,.9); z-index:2; }
+  .knob { position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); width:28px; height:28px; border-radius:50%; background:#0b0b0c; border:1px solid var(--gold); display:grid; place-items:center; color:var(--gold); font-size:10px; cursor:ew-resize; z-index:3; }
+  .cap { position:absolute; bottom:10px; font-size:11px; color:var(--txt2); background:rgba(11,11,12,.72); backdrop-filter:blur(8px); padding:2px 10px; border-radius:10px; z-index:2; }
+  .cap.l { left:10px; } .cap.r { right:10px; color:var(--gold); }
+
+  /* 浮动审查条（悬在画布底部上方，Figma 浮层式） */
+  .reviewbar { position:absolute; left:50%; bottom:64px; transform:translateX(-50%); display:flex; align-items:center; gap:10px; background:rgba(16,16,18,.88); backdrop-filter:blur(12px); border:1px solid var(--line); border-radius:12px; padding:7px 10px; box-shadow:0 12px 40px rgba(0,0,0,.5); }
+  .rb-txt { font-size:12px; color:var(--txt2); padding:0 6px 0 4px; max-width:300px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .rb-txt b { color:var(--txt); font-weight:500; }
+  .btn { border:1px solid var(--line); background:none; color:var(--txt2); font-size:12px; border-radius:8px; padding:5px 13px; cursor:pointer; transition:all .14s; font-family:inherit; white-space:nowrap; }
+  .btn:hover { color:var(--txt); border-color:#45454d; }
+  .btn.accept { background:var(--gold); border-color:var(--gold); color:#0b0b0c; font-weight:600; }
+  .btn.accept:hover { opacity:.85; color:#0b0b0c; }
+
+  /* 底部浮动工具栏（Figma UI3 式） */
+  .floatbar { position:absolute; left:50%; bottom:16px; transform:translateX(-50%); display:flex; align-items:center; gap:2px; background:rgba(16,16,18,.88); backdrop-filter:blur(12px); border:1px solid var(--line); border-radius:12px; padding:5px 8px; box-shadow:0 12px 40px rgba(0,0,0,.5); }
+  .tool { width:32px; height:30px; display:grid; place-items:center; border-radius:8px; color:var(--txt2); font-size:14px; cursor:pointer; transition:all .12s; }
+  .tool:hover { background:var(--raise); color:var(--txt); }
+  .tool.on { background:var(--gold-soft); color:var(--gold); }
+  .fsep { width:1px; height:18px; background:var(--line); margin:0 6px; }
+  .zoom { font-size:11px; color:var(--txt3); font-family:var(--mono); padding:0 8px 0 4px; }
+
+  /* ── 右：智能体（Runway 对话 + 计划；Krea 式：模型选择沉底） ── */
+  .agent { border-left:1px solid var(--line); background:var(--panel); display:flex; flex-direction:column; min-height:0; }
+  .feed { flex:1; overflow-y:auto; padding:14px 16px; display:flex; flex-direction:column; gap:12px; }
+  .msg .src { font-size:10px; color:var(--txt3); margin-bottom:4px; letter-spacing:.5px; }
+  .msg .body { font-size:12.5px; line-height:1.6; padding:9px 13px; border-radius:10px; max-width:95%; }
+  .msg.ai .body { background:var(--raise); }
+  .msg.human { align-items:flex-end; text-align:right; }
+  .msg.human .body { background:#151b21; }
+  .plan { margin-top:9px; padding:9px 11px; border-radius:8px; background:var(--bg); }
+  .plan .ph { font-size:10px; color:var(--txt3); letter-spacing:1.5px; margin-bottom:7px; }
+  .pi { display:flex; gap:9px; align-items:center; font-size:12px; padding:3.5px 0; color:var(--txt3); }
+  .pi .ix { font-family:var(--mono); font-size:10px; width:17px; }
+  .pi .pd { width:5px; height:5px; border-radius:50%; background:var(--line); margin-left:auto; }
+  .pi.done { color:var(--txt2); } .pi.done .pd { background:var(--ok); }
+  .pi.doing { color:var(--gold); } .pi.doing .pd { background:var(--gold); box-shadow:0 0 7px var(--gold); }
+
+  /* 模型/工作流选择（Krea 沉底式） */
+  .models { border-top:1px solid var(--line); padding:10px 14px 12px; }
+  .models .mh { font-size:10px; color:var(--txt3); letter-spacing:1.5px; margin-bottom:8px; }
+  .chips { display:flex; gap:6px; flex-wrap:wrap; }
+  .chip { font-size:11px; color:var(--txt2); border:1px solid var(--line); border-radius:12px; padding:3px 11px; cursor:pointer; transition:all .13s; }
+  .chip:hover { color:var(--txt); border-color:#45454d; }
+  .chip.on { color:var(--gold); border-color:var(--gold); background:var(--gold-soft); }
+
+  ::-webkit-scrollbar { width:8px; }
+  ::-webkit-scrollbar-thumb { background:var(--line); border-radius:4px; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo"><div class="pt"></div><b>孔雀翎</b></div>
+  <div class="proj"><b>将军水墨立绘</b> · 项目</div>
+  <div class="ask">
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#9c9ca4" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+    <input placeholder="对智能体说：生成 / 修改 / 审查意见…">
+    <button class="go">发送</button>
+  </div>
+  <div class="hright">
+    <span class="status"><i></i>本机集群</span>
+    <div class="avatar"></div>
+  </div>
+</header>
+
+<main>
+  <!-- 左：版本流 -->
+  <section class="versions">
+    <div class="pane-h"><span>版本流</span><span class="cnt">5</span></div>
+    <div class="v-list">
+      <div class="v">
+        <div class="th"><img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='128' height='88'%3E%3Crect width='128' height='88' fill='%233a4234'/%3E%3Cellipse cx='64' cy='52' rx='38' ry='20' fill='%23a05a3a' opacity='.5'/%3E%3C/svg%3E" alt=""><span class="who">AI</span></div>
+        <div class="info"><span class="vt">底稿生成</span><span class="vm">sd3-inpaint · v1</span></div>
+      </div>
+      <div class="v">
+        <div class="th"><img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='128' height='88'%3E%3Crect width='128' height='88' fill='%2346483a'/%3E%3Cellipse cx='64' cy='52' rx='44' ry='22' fill='%23a05a3a' opacity='.5'/%3E%3Ccircle cx='96' cy='26' r='12' fill='%23d8c890' opacity='.4'/%3E%3C/svg%3E" alt=""><span class="who">AI</span></div>
+        <div class="info"><span class="vt">背景扩展</span><span class="vm">outpaint · v2</span></div>
+      </div>
+      <div class="v">
+        <div class="th"><img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='128' height='88'%3E%3Crect width='128' height='88' fill='%234a4c40'/%3E%3Cellipse cx='60' cy='50' rx='40' ry='20' fill='%23a86040' opacity='.55'/%3E%3Ccircle cx='92' cy='24' r='11' fill='%23d8c890' opacity='.4'/%3E%3C/svg%3E" alt=""><span class="who h">你</span></div>
+        <div class="info"><span class="vt">构图调整</span><span class="vm">手动 · v3</span></div>
+      </div>
+      <div class="v active">
+        <div class="th"><img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='128' height='88'%3E%3Crect width='128' height='88' fill='%23e5e0d4'/%3E%3Cpath d='M0 66 Q30 50 64 62 T128 58 V88 H0 Z' fill='%232c2c28' opacity='.85'/%3E%3Ccircle cx='94' cy='28' r='14' fill='%23b05050' opacity='.25'/%3E%3C/svg%3E" alt=""><span class="who">AI</span></div>
+        <div class="info"><span class="vt">水墨风格迁移 <span class="badge">待审</span></span><span class="vm">ink-wash-v3 · v4</span></div>
+      </div>
+      <div class="v pending">
+        <div class="th"><img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='128' height='88'%3E%3Crect width='128' height='88' fill='%231a1a1c'/%3E%3C/svg%3E" alt=""></div>
+        <div class="info"><span class="vt">细节修复</span><span class="vm">inpaint · v5 · 排队</span></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 中：画布 -->
+  <section class="canvas-wrap">
+    <div class="stage">
+      <div class="artboard">
+        <img class="before" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='1536' height='1024'%3E%3Cdefs%3E%3ClinearGradient id='a' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%234a5540'/%3E%3Cstop offset='.5' stop-color='%237a6a48'/%3E%3Cstop offset='1' stop-color='%2334343c'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='1536' height='1024' fill='url(%23a)'/%3E%3Cellipse cx='760' cy='560' rx='420' ry='240' fill='%23c26a4a' opacity='.5'/%3E%3Ccircle cx='1120' cy='300' r='130' fill='%23e8d9a0' opacity='.45'/%3E%3Cpath d='M0 800 Q400 640 800 780 T1536 720 V1024 H0 Z' fill='%23232a1e' opacity='.85'/%3E%3C/svg%3E" alt="">
+        <img class="after" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='1536' height='1024'%3E%3Crect width='1536' height='1024' fill='%23ebe6da'/%3E%3Cpath d='M0 780 Q300 620 640 750 T1536 700 V1024 H0 Z' fill='%2330302c' opacity='.9'/%3E%3Cpath d='M120 720 Q440 540 780 700' stroke='%23242420' stroke-width='12' fill='none' opacity='.45'/%3E%3Cpath d='M200 760 Q500 620 820 740' stroke='%23242420' stroke-width='6' fill='none' opacity='.3'/%3E%3Ccircle cx='1180' cy='340' r='160' fill='%23c25b5b' opacity='.2'/%3E%3Crect x='1380' y='140' width='12' height='130' fill='%23b03a3a' opacity='.65'/%3E%3C/svg%3E" alt="">
+        <div class="vline"></div>
+        <div class="knob">⇔</div>
+        <div class="cap l">v3 · 修改前</div>
+        <div class="cap r">v4 · 水墨迁移</div>
+      </div>
+
+      <!-- 浮动审查条 -->
+      <div class="reviewbar">
+        <span class="rb-txt"><b>v4 水墨风格迁移</b> — "保留将军主体，背景留白"</span>
+        <button class="btn">打回</button>
+        <button class="btn">微调</button>
+        <button class="btn accept">接受</button>
+      </div>
+
+      <!-- 浮动工具栏 -->
+      <div class="floatbar">
+        <div class="tool on">✥</div>
+        <div class="tool">▧</div>
+        <div class="tool">◍</div>
+        <div class="fsep"></div>
+        <div class="tool">A</div>
+        <div class="tool">✂</div>
+        <div class="fsep"></div>
+        <div class="tool">⟲</div>
+        <div class="tool">⟳</div>
+        <span class="zoom">100%</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- 右：智能体 -->
+  <section class="agent">
+    <div class="pane-h"><span>智能体</span><span class="cnt">qwen3-27b</span></div>
+    <div class="feed">
+      <div class="msg human"><div class="src">你 · 14:02</div><div class="body">做一张将军水墨立绘，背景要留白</div></div>
+      <div class="msg ai"><div class="src">智能体</div><div class="body">收到，拆解为 5 步。
+        <div class="plan">
+          <div class="ph">执行计划</div>
+          <div class="pi done"><span class="ix">01</span>底稿生成<span class="pd"></span></div>
+          <div class="pi done"><span class="ix">02</span>背景扩展<span class="pd"></span></div>
+          <div class="pi done"><span class="ix">03</span>构图调整<span class="pd"></span></div>
+          <div class="pi doing"><span class="ix">04</span>水墨风格迁移<span class="pd"></span></div>
+          <div class="pi"><span class="ix">05</span>细节修复<span class="pd"></span></div>
+        </div>
+        v4 已完成，请审查画布。</div></div>
+      <div class="msg ai"><div class="src">智能体</div><div class="body">若水墨偏重，直接说「淡一点」——同参数重跑，不重画底稿。</div></div>
+    </div>
+    <div class="models">
+      <div class="mh">工作流</div>
+      <div class="chips">
+        <span class="chip on">ink-wash-v3</span>
+        <span class="chip">sd3-inpaint</span>
+        <span class="chip">outpaint</span>
+        <span class="chip">+ 更多</span>
+      </div>
+    </div>
+  </section>
+</main>
+</body>
+</html>
