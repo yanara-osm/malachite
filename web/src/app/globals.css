@@ -1,0 +1,196 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: "Inter", "PingFang SC", "Microsoft YaHei", system-ui, -apple-system, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, monospace;
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+}
+
+/* ===== 孔雀翎 dark theme (Runway 式近黑 + 冷灰) ===== */
+:root {
+  --background: oklch(0.13 0.005 260);
+  --foreground: oklch(0.97 0 0);
+  --card: oklch(0.17 0.006 260);
+  --card-foreground: oklch(0.97 0 0);
+  --popover: oklch(0.17 0.006 260);
+  --popover-foreground: oklch(0.97 0 0);
+  --primary: oklch(0.98 0 0);
+  --primary-foreground: oklch(0.13 0 0);
+  --secondary: oklch(0.22 0.008 260);
+  --secondary-foreground: oklch(0.97 0 0);
+  --muted: oklch(0.22 0.008 260);
+  --muted-foreground: oklch(0.62 0.01 260);
+  --accent: oklch(0.24 0.01 260);
+  --accent-foreground: oklch(0.97 0 0);
+  --destructive: oklch(0.577 0.245 27.325);
+  --border: oklch(1 0 0 / 8%);
+  --input: oklch(1 0 0 / 10%);
+  --ring: oklch(0.62 0.01 260);
+  --chart-1: oklch(0.8 0.1 190);
+  --chart-2: oklch(0.7 0.15 280);
+  --chart-3: oklch(0.8 0.15 80);
+  --chart-4: oklch(0.65 0.2 340);
+  --chart-5: oklch(0.7 0.12 220);
+  --radius: 0.625rem;
+  --sidebar: oklch(0.15 0.005 260);
+  --sidebar-foreground: oklch(0.97 0 0);
+  --sidebar-primary: oklch(0.98 0 0);
+  --sidebar-primary-foreground: oklch(0.13 0 0);
+  --sidebar-accent: oklch(0.24 0.01 260);
+  --sidebar-accent-foreground: oklch(0.97 0 0);
+  --sidebar-border: oklch(1 0 0 / 8%);
+  --sidebar-ring: oklch(0.62 0.01 260);
+
+  /* 品牌霓虹（孔雀翎：青绿→紫→金）*/
+  --brand-cyan: oklch(0.82 0.16 180);
+  --brand-violet: oklch(0.68 0.22 290);
+  --brand-gold: oklch(0.85 0.16 85);
+}
+
+/* ===== 动效 ===== */
+@keyframes feather-breathe {
+  0%, 100% { opacity: 0.32; filter: drop-shadow(0 0 18px oklch(0.82 0.16 180 / 0.25)); }
+  50% { opacity: 0.6; filter: drop-shadow(0 0 42px oklch(0.68 0.22 290 / 0.45)); }
+}
+@keyframes aurora-drift {
+  0% { transform: translate3d(-6%, -4%, 0) scale(1); }
+  50% { transform: translate3d(5%, 6%, 0) scale(1.12); }
+  100% { transform: translate3d(-6%, -4%, 0) scale(1); }
+}
+@keyframes aurora-drift-2 {
+  0% { transform: translate3d(4%, 6%, 0) scale(1.05); }
+  50% { transform: translate3d(-6%, -5%, 0) scale(0.95); }
+  100% { transform: translate3d(4%, 6%, 0) scale(1.05); }
+}
+@keyframes fade-up {
+  from { opacity: 0; transform: translateY(14px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+@keyframes pulse-ring {
+  0% { box-shadow: 0 0 0 0 oklch(0.82 0.16 180 / 0.35); }
+  70% { box-shadow: 0 0 0 14px oklch(0.82 0.16 180 / 0); }
+  100% { box-shadow: 0 0 0 0 oklch(0.82 0.16 180 / 0); }
+}
+
+.feather-breathe { animation: feather-breathe 6s ease-in-out infinite; }
+.aurora-1 { animation: aurora-drift 26s ease-in-out infinite; }
+.aurora-2 { animation: aurora-drift-2 34s ease-in-out infinite; }
+.fade-up { animation: fade-up 0.7s cubic-bezier(0.22, 1, 0.36, 1) both; }
+.pulse-ring { animation: pulse-ring 2.4s ease-out infinite; }
+
+.text-shimmer {
+  background: linear-gradient(100deg,
+    oklch(0.97 0 0) 20%,
+    var(--brand-cyan) 40%,
+    var(--brand-violet) 60%,
+    oklch(0.97 0 0) 80%);
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: shimmer 7s linear infinite;
+}
+
+/* 输入框渐变描边（克制冷色系，双背景 trick）*/
+.ring-gradient {
+  position: relative;
+  background:
+    linear-gradient(oklch(0.18 0.008 260), oklch(0.18 0.008 260)) padding-box,
+    linear-gradient(120deg,
+      oklch(0.78 0.14 190 / 0.55),
+      oklch(0.62 0.18 280 / 0.4) 60%,
+      oklch(0.78 0.14 190 / 0.25)) border-box;
+  border: 1px solid transparent;
+  transition: box-shadow 0.3s ease;
+}
+.ring-gradient:focus-within {
+  box-shadow: 0 0 0 1px oklch(0.78 0.14 190 / 0.2),
+              0 12px 48px -12px oklch(0.62 0.18 280 / 0.35);
+}
+
+/* 卡片 grain 纹理（去失焦眩光感）*/
+.grain::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.5'/%3E%3C/svg%3E");
+  opacity: 0.35;
+  mix-blend-mode: overlay;
+  pointer-events: none;
+}
+
+/* 生成艺术卡面（去眩光：低饱和 + 中心暗角，靠 grain 出质感）*/
+.art-ink { background:
+  radial-gradient(140% 110% at 30% 20%, oklch(0.5 0.09 190 / 0.35), transparent 58%),
+  radial-gradient(120% 100% at 80% 90%, oklch(0.34 0.06 215 / 0.5), transparent 60%),
+  linear-gradient(158deg, oklch(0.26 0.04 195), oklch(0.15 0.03 210) 68%, oklch(0.11 0.02 220)); }
+.art-cyber { background:
+  radial-gradient(120% 100% at 76% 24%, oklch(0.46 0.16 330 / 0.35), transparent 58%),
+  radial-gradient(105% 105% at 20% 88%, oklch(0.44 0.16 285 / 0.4), transparent 58%),
+  linear-gradient(202deg, oklch(0.22 0.05 320), oklch(0.13 0.04 300) 70%, oklch(0.10 0.03 310)); }
+.art-gold { background:
+  radial-gradient(125% 105% at 50% 16%, oklch(0.56 0.12 82 / 0.35), transparent 56%),
+  radial-gradient(105% 88% at 84% 92%, oklch(0.46 0.1 70 / 0.4), transparent 58%),
+  linear-gradient(168deg, oklch(0.28 0.06 80), oklch(0.16 0.05 75) 70%, oklch(0.11 0.03 70)); }
+.art-aurora { background:
+  radial-gradient(130% 105% at 26% 20%, oklch(0.5 0.13 155 / 0.35), transparent 56%),
+  radial-gradient(105% 95% at 80% 78%, oklch(0.46 0.16 288 / 0.4), transparent 58%),
+  linear-gradient(182deg, oklch(0.18 0.04 160), oklch(0.13 0.04 230) 70%, oklch(0.10 0.03 240)); }
+.art-lava { background:
+  radial-gradient(118% 100% at 70% 28%, oklch(0.46 0.16 24 / 0.35), transparent 56%),
+  radial-gradient(102% 96% at 24% 90%, oklch(0.5 0.12 54 / 0.4), transparent 58%),
+  linear-gradient(192deg, oklch(0.24 0.06 25), oklch(0.14 0.05 20) 70%, oklch(0.10 0.03 18)); }
+.art-ocean { background:
+  radial-gradient(122% 105% at 40% 18%, oklch(0.44 0.12 232 / 0.35), transparent 56%),
+  radial-gradient(105% 96% at 82% 90%, oklch(0.4 0.14 268 / 0.4), transparent 58%),
+  linear-gradient(178deg, oklch(0.19 0.04 235), oklch(0.13 0.04 250) 70%, oklch(0.10 0.03 255)); }
+
+.card-art { transition: transform 0.35s cubic-bezier(0.22, 1, 0.36, 1), border-color 0.25s; }
+.card-art:hover { transform: translateY(-4px) scale(1.015); border-color: oklch(1 0 0 / 18%); }
+
+::selection { background: oklch(0.68 0.22 290 / 0.35); }

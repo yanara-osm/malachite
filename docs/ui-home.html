@@ -6,283 +6,356 @@
 <title>孔雀翎 Malachite</title>
 <style>
   :root {
-    --bg: #05070c;
-    --txt: #eef2f7;
-    --txt2: #6b7688;
-    --txt3: #3d4655;
-    --em: #2dd4a0;
-    --cy: #43c6e8;
-    --gd: #e8c15a;
-    --mg: #c857d8;
-    --glass: rgba(14,20,30,.55);
-    --line: rgba(120,160,200,.14);
+    --bg: #000000;
+    --bg2: #030303;
+    --surface: #1a1a1a;
+    --border: #27272a;
+    --border-soft: #1a1a1a;
+    --fg: #ffffff;
+    --fg2: #e9ecf2;
+    --slate: #767d88;
+    --slate2: #7d848e;
+    --muted: #a7a7a7;
+    --faint: #525252;
   }
-  * { margin:0; padding:0; box-sizing:border-box; }
-  html,body { height:100%; }
-  body { background:var(--bg); color:var(--txt); font:14px/1.6 -apple-system,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif; overflow:hidden; display:flex; flex-direction:column; -webkit-font-smoothing:antialiased; }
-
-  /* ── 背景 ── */
-  .bg { position:fixed; inset:0; z-index:0; overflow:hidden; }
-  .aur { position:absolute; border-radius:50%; filter:blur(90px); opacity:.42; mix-blend-mode:screen; }
-  .aur.a1 { width:56vw; height:56vw; left:-12vw; top:-18vw; background:radial-gradient(circle, rgba(45,212,160,.28), transparent 65%); animation:drift1 26s ease-in-out infinite alternate; }
-  .aur.a2 { width:48vw; height:48vw; right:-10vw; top:-6vw; background:radial-gradient(circle, rgba(67,198,232,.24), transparent 65%); animation:drift2 32s ease-in-out infinite alternate; }
-  .aur.a3 { width:44vw; height:44vw; left:28vw; bottom:-24vw; background:radial-gradient(circle, rgba(200,87,216,.15), transparent 65%); animation:drift3 38s ease-in-out infinite alternate; }
-  @keyframes drift1 { to { transform:translate(9vw,7vh) scale(1.15); } }
-  @keyframes drift2 { to { transform:translate(-8vw,9vh) scale(1.08); } }
-  @keyframes drift3 { to { transform:translate(6vw,-8vh) scale(1.12); } }
-  .stars { position:absolute; inset:0; opacity:.6; background-image:
-    radial-gradient(1px 1px at 12% 22%, rgba(255,255,255,.45), transparent 60%),
-    radial-gradient(1px 1px at 32% 68%, rgba(160,220,255,.35), transparent 60%),
-    radial-gradient(1.5px 1.5px at 55% 15%, rgba(255,255,255,.4), transparent 60%),
-    radial-gradient(1px 1px at 71% 42%, rgba(255,220,180,.35), transparent 60%),
-    radial-gradient(1px 1px at 84% 75%, rgba(160,255,220,.3), transparent 60%),
-    radial-gradient(1.5px 1.5px at 91% 24%, rgba(255,255,255,.45), transparent 60%),
-    radial-gradient(1px 1px at 45% 85%, rgba(200,180,255,.3), transparent 60%),
-    radial-gradient(1px 1px at 22% 48%, rgba(255,255,255,.25), transparent 60%);
-    animation:twinkle 7s ease-in-out infinite alternate;
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    font-family: "Inter", "DM Sans", system-ui, -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif;
+    background: var(--bg);
+    color: var(--fg);
+    -webkit-font-smoothing: antialiased;
+    overflow: hidden;
   }
-  @keyframes twinkle { from { opacity:.45; } to { opacity:.75; } }
-  .grid { position:absolute; left:-30vw; right:-30vw; bottom:-12vh; height:44vh;
-    background:
-      linear-gradient(transparent 0, rgba(45,212,160,.08) 100%),
-      repeating-linear-gradient(90deg, rgba(67,198,232,.12) 0 1px, transparent 1px 64px),
-      repeating-linear-gradient(0deg, rgba(67,198,232,.12) 0 1px, transparent 1px 44px);
-    transform:perspective(560px) rotateX(62deg);
-    mask-image:linear-gradient(transparent, black 55%);
-    animation:gridflow 9s linear infinite;
+  .app { display: grid; grid-template-columns: 232px 1fr; height: 100vh; }
+
+  /* ---------- Left nav rail (Runway 左导航栏) ---------- */
+  .rail {
+    border-right: 1px solid var(--border);
+    background: var(--bg2);
+    display: flex; flex-direction: column;
+    padding: 14px 10px;
   }
-  @keyframes gridflow { from { background-position:0 0, 0 0, 0 0; } to { background-position:0 0, 0 0, 0 44px; } }
-
-  /* ── 顶栏（低调） ── */
-  header { position:relative; z-index:2; flex:none; display:flex; align-items:center; justify-content:space-between; padding:24px 32px; }
-  .logo { display:flex; align-items:center; gap:10px; user-select:none; opacity:.8; }
-  .logo .pt { width:7px; height:7px; border-radius:50%; background:linear-gradient(135deg,var(--em),var(--cy)); box-shadow:0 0 10px rgba(45,212,160,.6); }
-  .logo b { font-size:14px; font-weight:600; letter-spacing:3px; color:#c6cfdb; }
-  .logo span { font-size:9px; color:var(--txt3); font-family:Consolas,monospace; letter-spacing:3px; }
-  .hright { display:flex; align-items:center; gap:14px; }
-  .status { font-size:11px; color:var(--txt3); display:flex; align-items:center; gap:7px; padding:5px 13px; border-radius:14px; background:var(--glass); border:1px solid var(--line); backdrop-filter:blur(10px); }
-  .status i { width:6px; height:6px; border-radius:50%; background:var(--em); box-shadow:0 0 8px var(--em); animation:pulse 2.4s ease-in-out infinite; }
-  @keyframes pulse { 50% { opacity:.4; } }
-  .avatar { width:30px; height:30px; border-radius:50%; background:conic-gradient(from 210deg, var(--em), var(--cy), var(--mg), var(--em)); padding:2px; opacity:.85; }
-  .avatar::after { content:""; display:block; width:100%; height:100%; border-radius:50%; background:#0c1119; }
-
-  /* ── 主区 ── */
-  main { position:relative; z-index:2; flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; padding:0 24px 40px; min-height:0; }
-
-  /* 拖入图片位 */
-  .dropzone { width:min(500px, 80%); margin-bottom:24px; display:none; }
-  .dropzone.has { display:block; animation:pop .35s cubic-bezier(.2,1.4,.4,1); }
-  @keyframes pop { from { transform:scale(.92); opacity:0; } }
-  .dz-frame { position:relative; width:100%; aspect-ratio:3/2; border-radius:16px; overflow:hidden; border:1px solid rgba(45,212,160,.4); box-shadow:0 0 0 1px rgba(45,212,160,.15), 0 24px 70px rgba(0,0,0,.6), 0 0 44px rgba(45,212,160,.12); background:#0a0f16; }
-  .dz-frame img { width:100%; height:100%; object-fit:contain; display:block; }
-  .dz-tag { position:absolute; bottom:11px; left:11px; font-size:11px; color:#cfe8dd; background:rgba(6,10,16,.7); backdrop-filter:blur(8px); padding:3px 11px; border-radius:11px; border:1px solid var(--line); max-width:70%; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-  .dz-x { position:absolute; top:11px; right:11px; width:27px; height:27px; border-radius:50%; background:rgba(6,10,16,.7); border:1px solid var(--line); color:var(--txt2); display:grid; place-items:center; cursor:pointer; font-size:12px; backdrop-filter:blur(8px); }
-  .dz-x:hover { color:#fff; border-color:rgba(255,120,120,.5); }
-
-  /* 中央孔雀翎：若隐若现 */
-  .emblem { position:relative; height:min(38vh, 320px); display:grid; place-items:center; margin-bottom:18px; transition:opacity .5s; }
-  .emblem.dim { opacity:.25; }
-  .emblem svg { height:100%; width:auto; animation:breathe 6s ease-in-out infinite; filter:drop-shadow(0 0 34px rgba(45,212,160,.22)); }
-  @keyframes breathe {
-    0%,100% { opacity:.34; transform:scale(1); }
-    50% { opacity:.62; transform:scale(1.025); }
+  .brand {
+    display: flex; align-items: center; gap: 9px;
+    padding: 8px 10px 18px;
   }
-  .emblem .ring { position:absolute; width:118%; aspect-ratio:1; border-radius:50%; border:1px solid rgba(45,212,160,.12); animation:ringpulse 6s ease-in-out infinite; }
-  @keyframes ringpulse { 0%,100% { transform:scale(.96); opacity:.5; } 50% { transform:scale(1.04); opacity:1; } }
+  .brand .mark {
+    width: 26px; height: 26px; border-radius: 7px;
+    background: #fff; color: #000;
+    display: grid; place-items: center;
+    font-weight: 700; font-size: 14px;
+    font-family: "Songti SC","STSong",serif;
+  }
+  .brand .name { font-size: 14px; font-weight: 600; letter-spacing: -0.2px; }
+  .brand .name span { color: var(--slate); font-weight: 400; }
 
-  .hero { text-align:center; margin-bottom:34px; }
-  .hero h1 { font-size:17px; font-weight:500; letter-spacing:10px; text-indent:10px; color:#8a95a6; }
-  .hero p { margin-top:9px; font-size:12.5px; color:var(--txt3); letter-spacing:2px; }
-  .hero p b { color:var(--txt2); font-weight:500; }
+  .nav { display: flex; flex-direction: column; gap: 1px; }
+  .nav .grp {
+    font-size: 10px; font-weight: 500; letter-spacing: 0.6px;
+    text-transform: uppercase; color: var(--faint);
+    padding: 14px 10px 6px;
+  }
+  .nav a {
+    display: flex; align-items: center; gap: 11px;
+    padding: 8px 10px; border-radius: 8px;
+    color: var(--slate); text-decoration: none;
+    font-size: 13.5px; font-weight: 450;
+    transition: background .12s, color .12s;
+  }
+  .nav a svg { width: 17px; height: 17px; stroke: currentColor; stroke-width: 1.6; fill: none; opacity: .85; }
+  .nav a:hover { background: #111; color: var(--fg2); }
+  .nav a.active { background: #161616; color: #fff; }
+  .rail .spacer { flex: 1; }
+  .me {
+    display: flex; align-items: center; gap: 10px;
+    padding: 9px 10px; border-top: 1px solid var(--border);
+    margin-top: 10px;
+  }
+  .me .av { width: 28px; height: 28px; border-radius: 50%; background: linear-gradient(135deg,#3a3f47,#1c1f24); }
+  .me .who { font-size: 12.5px; color: var(--fg2); }
+  .me .who small { display: block; color: var(--faint); font-size: 11px; }
 
-  /* ── 对话输入（唯一炫彩焦点） ── */
-  .chat { width:min(700px, 92%); }
-  .chat-box { position:relative; border-radius:20px; padding:1px; background:linear-gradient(120deg, rgba(45,212,160,.7), rgba(67,198,232,.45) 35%, rgba(200,87,216,.4) 70%, rgba(232,193,90,.5)); transition:filter .25s, box-shadow .25s; }
-  .chat-box::before { content:""; position:absolute; inset:-3px; border-radius:22px; background:inherit; filter:blur(16px); opacity:.5; z-index:-1; transition:opacity .25s; }
-  .chat-box:hover::before, .chat-box:focus-within::before { opacity:.9; }
-  .chat-box.dragover { filter:brightness(1.35); }
-  .chat-in { background:linear-gradient(160deg, rgba(13,19,29,.94), rgba(9,13,20,.96)); backdrop-filter:blur(14px); border-radius:19px; }
-  .chat-input { display:flex; align-items:flex-end; gap:10px; padding:16px 18px 10px; }
-  .chat-input textarea { flex:1; background:none; border:none; outline:none; resize:none; color:var(--txt); font:inherit; font-size:14.5px; line-height:1.55; max-height:130px; }
-  .chat-input textarea::placeholder { color:var(--txt3); }
-  .chat-foot { display:flex; align-items:center; gap:6px; padding:8px 12px 13px; }
-  .icon-btn { height:32px; padding:0 13px; border-radius:10px; display:flex; align-items:center; gap:7px; color:var(--txt2); cursor:pointer; font-size:12.5px; transition:all .14s; border:1px solid transparent; background:none; font-family:inherit; }
-  .icon-btn:hover { background:rgba(120,160,200,.08); color:var(--txt); border-color:var(--line); }
-  .send { margin-left:auto; width:36px; height:36px; border-radius:50%; border:none; background:linear-gradient(135deg,var(--em),var(--cy)); color:#04120c; font-size:16px; cursor:pointer; display:grid; place-items:center; font-weight:700; box-shadow:0 0 20px rgba(45,212,160,.45); transition:all .15s; }
-  .send:hover { box-shadow:0 0 32px rgba(45,212,160,.7); transform:translateY(-1px); }
-  .send:active { transform:scale(.94); }
-  .send.disabled { background:rgba(120,140,170,.15); color:var(--txt3); box-shadow:none; cursor:default; }
+  /* ---------- Main ---------- */
+  .main { position: relative; display: flex; flex-direction: column; overflow-y: auto; }
+  .topbar {
+    display: flex; justify-content: flex-end; align-items: center;
+    padding: 16px 28px; gap: 14px;
+  }
+  .credits {
+    display: flex; align-items: center; gap: 7px;
+    font-size: 12.5px; color: var(--slate);
+    padding: 6px 12px; border: 1px solid var(--border); border-radius: 20px;
+  }
+  .credits b { color: var(--fg2); font-weight: 600; }
+  .credits .dot { width: 6px; height: 6px; border-radius: 50%; background: #22c55e; }
 
-  .hints { display:flex; justify-content:center; gap:10px; margin-top:18px; flex-wrap:wrap; }
-  .hint { font-size:12px; color:var(--txt3); border:1px solid rgba(120,160,200,.1); border-radius:14px; padding:5px 14px; cursor:pointer; transition:all .16s; background:rgba(14,20,30,.4); backdrop-filter:blur(8px); }
-  .hint:hover { color:var(--txt2); border-color:rgba(45,212,160,.35); transform:translateY(-1px); }
-  .hint::before { content:"◈ "; color:var(--em); opacity:.4; }
+  .stage { flex: 1; padding: 8px 28px 40px; overflow-y: auto; }
+  .stage-inner { max-width: 900px; margin: 0 auto; }
 
-  .veil { position:fixed; inset:0; z-index:99; display:none; place-items:center; pointer-events:none;
-    background:radial-gradient(ellipse at center, rgba(45,212,160,.07), rgba(5,7,12,.4));
-    border:2px solid rgba(45,212,160,.55); box-shadow:inset 0 0 90px rgba(45,212,160,.15); }
-  .veil.on { display:grid; }
-  .veil span { font-size:16px; letter-spacing:4px; color:var(--em); text-shadow:0 0 20px rgba(45,212,160,.6); }
+  /* Agent prompt (顶部主角) */
+  .hero { text-align: center; padding: 40px 0 30px; }
+  .hero h1 {
+    font-size: 26px; font-weight: 500; letter-spacing: -0.8px; line-height: 1.0;
+  }
+  .hero h1 em { font-style: normal; color: var(--slate); font-weight: 400; }
+  .hero p { margin-top: 10px; font-size: 14px; color: var(--slate); }
+
+  .prompt {
+    margin-top: 26px; text-align: left;
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    transition: border-color .15s;
+  }
+  .prompt:focus-within { border-color: #3f3f46; }
+  .prompt .drop-img {
+    display: none; margin: 14px 14px 0; position: relative;
+    border-radius: 10px; overflow: hidden; max-width: 340px;
+    border: 1px solid var(--border);
+  }
+  .prompt .drop-img.on { display: block; }
+  .prompt .drop-img img { display: block; width: 100%; }
+  .prompt .drop-img .cap {
+    position: absolute; left: 0; bottom: 0; right: 0;
+    padding: 6px 10px; font-size: 11.5px; color: var(--fg2);
+    background: linear-gradient(transparent, rgba(0,0,0,.8));
+  }
+  .prompt .drop-img .rm {
+    position: absolute; top: 8px; right: 8px;
+    width: 22px; height: 22px; border-radius: 50%;
+    background: rgba(0,0,0,.6); color: #fff; border: none;
+    cursor: pointer; font-size: 13px; line-height: 1;
+  }
+  .prompt textarea {
+    width: 100%; background: transparent; border: none; outline: none; resize: none;
+    color: var(--fg); font-family: inherit; font-size: 15.5px; line-height: 1.5;
+    padding: 16px 16px 8px; min-height: 58px;
+  }
+  .prompt textarea::placeholder { color: var(--faint); }
+  .prompt .bar {
+    display: flex; align-items: center; gap: 8px;
+    padding: 8px 12px 12px;
+  }
+  .chip {
+    font-size: 12px; color: var(--slate);
+    padding: 5px 10px; border: 1px solid var(--border); border-radius: 7px;
+    cursor: pointer; background: transparent;
+    transition: border-color .12s, color .12s;
+  }
+  .chip:hover { border-color: #3f3f46; color: var(--fg2); }
+  .chip b { color: var(--muted); font-weight: 600; margin-right: 3px; }
+  .bar .spacer { flex: 1; }
+  .send {
+    width: 34px; height: 34px; border-radius: 9px;
+    background: #fff; color: #000; border: none; cursor: pointer;
+    display: grid; place-items: center;
+    transition: transform .12s, background .12s;
+  }
+  .send:hover { transform: translateY(-1px); background: #f0f0f0; }
+  .send svg { width: 17px; height: 17px; stroke: #000; stroke-width: 2; fill: none; }
+
+  /* Presets (图片驱动的炫彩区) */
+  .sec { margin-top: 40px; }
+  .sec-head {
+    display: flex; align-items: baseline; justify-content: space-between;
+    margin-bottom: 16px;
+  }
+  .sec-head .t { font-size: 13px; font-weight: 500; letter-spacing: 0.4px; text-transform: uppercase; color: var(--slate); }
+  .sec-head .more { font-size: 12.5px; color: var(--faint); text-decoration: none; }
+  .sec-head .more:hover { color: var(--muted); }
+
+  .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+  .card {
+    position: relative; border-radius: 12px; overflow: hidden;
+    aspect-ratio: 4 / 3; cursor: pointer;
+    border: 1px solid var(--border-soft);
+    transition: transform .18s, border-color .18s;
+  }
+  .card:hover { transform: translateY(-3px); border-color: #3f3f46; }
+  .card .art { position: absolute; inset: 0; }
+  .card .veil {
+    position: absolute; inset: 0;
+    background: linear-gradient(180deg, rgba(0,0,0,0) 40%, rgba(0,0,0,.72) 100%);
+  }
+  .card .meta {
+    position: absolute; left: 12px; right: 12px; bottom: 11px;
+  }
+  .card .cat { font-size: 10px; font-weight: 500; letter-spacing: 0.5px; text-transform: uppercase; color: rgba(255,255,255,.6); }
+  .card .ttl { font-size: 14.5px; font-weight: 500; letter-spacing: -0.2px; color: #fff; margin-top: 2px; line-height: 1.2; }
+
+  /* 生成艺术占位（Runway 的"色彩来自图片"原则）*/
+  .art.ink   { background:
+    radial-gradient(120% 90% at 30% 20%, #2dd4bf33, transparent 55%),
+    radial-gradient(90% 80% at 80% 90%, #0e749055, transparent 60%),
+    linear-gradient(160deg, #06201f, #041013 70%, #02070a); }
+  .art.cyber { background:
+    radial-gradient(100% 80% at 75% 25%, #e11d9a44, transparent 55%),
+    radial-gradient(80% 90% at 20% 85%, #7c3aed55, transparent 60%),
+    linear-gradient(200deg, #17041a, #0a0310 70%, #050208); }
+  .art.gold  { background:
+    radial-gradient(110% 90% at 50% 15%, #f59e0b44, transparent 55%),
+    radial-gradient(90% 70% at 85% 90%, #b4530955, transparent 60%),
+    linear-gradient(170deg, #1c1204, #100a03 70%, #080502); }
+  .art.aurora{ background:
+    radial-gradient(120% 90% at 25% 20%, #22c55e44, transparent 55%),
+    radial-gradient(90% 80% at 80% 75%, #8b5cf655, transparent 60%),
+    linear-gradient(180deg, #03130c, #040a12 70%, #020608); }
+  .art.lava  { background:
+    radial-gradient(100% 85% at 70% 30%, #ef444444, transparent 55%),
+    radial-gradient(85% 80% at 25% 90%, #f9731655, transparent 60%),
+    linear-gradient(190deg, #180603, #0e0402 70%, #070201); }
+  .art.ocean { background:
+    radial-gradient(115% 90% at 40% 20%, #3b82f644, transparent 55%),
+    radial-gradient(90% 80% at 80% 90%, #4f46e555, transparent 60%),
+    linear-gradient(175deg, #04101f, #050a16 70%, #02050c); }
+
+  /* drag veil */
+  .dragveil {
+    position: fixed; inset: 0; display: none; z-index: 50;
+    align-items: center; justify-content: center;
+    background: rgba(0,0,0,.7); backdrop-filter: blur(2px);
+    border: 2px dashed var(--border); margin: 14px; border-radius: 18px;
+  }
+  .dragveil.on { display: flex; }
+  .dragveil .box { text-align: center; }
+  .dragveil .box .ic { font-size: 34px; color: var(--muted); }
+  .dragveil .box .tx { margin-top: 10px; font-size: 15px; color: var(--fg2); }
+  .dragveil .box .sub { margin-top: 6px; font-size: 12.5px; color: var(--slate); }
+
+  @media (max-width: 820px) { .grid { grid-template-columns: repeat(2,1fr); } .rail { display: none; } }
 </style>
 </head>
 <body>
-
-<div class="bg">
-  <div class="aur a1"></div><div class="aur a2"></div><div class="aur a3"></div>
-  <div class="stars"></div>
-  <div class="grid"></div>
-</div>
-
-<header>
-  <div class="logo"><div class="pt"></div><b>孔雀翎</b><span>MALACHITE</span></div>
-  <div class="hright">
-    <span class="status"><i></i>本机集群 · 就绪</span>
-    <div class="avatar"></div>
-  </div>
-</header>
-
-<main>
-  <!-- 拖入图片后出现（出现时翎羽退隐） -->
-  <div class="dropzone" id="dz">
-    <div class="dz-frame">
-      <img id="dzImg" src="" alt="">
-      <div class="dz-tag" id="dzTag">参考图</div>
-      <div class="dz-x" onclick="clearDz()">✕</div>
+<div class="app">
+  <!-- 左导航栏 -->
+  <aside class="rail">
+    <div class="brand">
+      <div class="mark">翎</div>
+      <div class="name">孔雀翎 <span>Malachite</span></div>
     </div>
-  </div>
+    <nav class="nav">
+      <a href="#" class="active"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>New Session</a>
+      <a href="#"><svg viewBox="0 0 24 24"><path d="M3 11l9-7 9 7M5 10v10h14V10"/></svg>Home</a>
+      <a href="#"><svg viewBox="0 0 24 24"><path d="M12 2v3M12 19v3M2 12h3M19 12h3M12 8a4 4 0 100 8 4 4 0 000-8z"/></svg>Agent</a>
+      <a href="#"><svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h10"/></svg>Tool</a>
+      <a href="#"><svg viewBox="0 0 24 24"><rect x="4" y="4" width="7" height="7" rx="1"/><rect x="13" y="4" width="7" height="7" rx="1"/><rect x="4" y="13" width="7" height="7" rx="1"/></svg>Apps</a>
+      <a href="#"><svg viewBox="0 0 24 24"><path d="M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z"/></svg>Workflows</a>
+      <div class="grp">Library</div>
+      <a href="#"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>Recents</a>
+      <a href="#"><svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h10"/></svg>Projects</a>
+      <a href="#"><svg viewBox="0 0 24 24"><rect x="4" y="6" width="16" height="12" rx="2"/><circle cx="9" cy="11" r="2"/></svg>Assets</a>
+    </nav>
+    <div class="spacer"></div>
+    <div class="me">
+      <div class="av"></div>
+      <div class="who">马之源<small>OSM 创作者</small></div>
+    </div>
+  </aside>
 
-  <!-- 中央：若隐若现的孔雀翎 -->
-  <div class="emblem" id="emblem">
-    <div class="ring"></div>
-    <svg viewBox="0 0 200 320" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <defs>
-        <linearGradient id="shaft" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0" stop-color="#2dd4a0" stop-opacity=".8"/>
-          <stop offset="1" stop-color="#43c6e8" stop-opacity=".25"/>
-        </linearGradient>
-        <radialGradient id="eye" cx=".5" cy=".45" r=".6">
-          <stop offset="0" stop-color="#e8c15a" stop-opacity=".9"/>
-          <stop offset=".38" stop-color="#c857d8" stop-opacity=".7"/>
-          <stop offset=".72" stop-color="#2dd4a0" stop-opacity=".65"/>
-          <stop offset="1" stop-color="#43c6e8" stop-opacity=".3"/>
-        </radialGradient>
-      </defs>
-      <!-- 羽轴 -->
-      <path d="M100 14 C 98 110, 100 210, 100 300" stroke="url(#shaft)" stroke-width="2.4" stroke-linecap="round"/>
-      <!-- 羽枝（左右渐短） -->
-      <g stroke="#2dd4a0" stroke-opacity=".3" stroke-width="1.2" stroke-linecap="round">
-        <path d="M100 42 C 82 34, 64 30, 48 32"/><path d="M100 42 C 118 34, 136 30, 152 32"/>
-        <path d="M100 62 C 78 54, 58 50, 40 53"/><path d="M100 62 C 122 54, 142 50, 160 53"/>
-        <path d="M100 84 C 76 76, 54 72, 36 76"/><path d="M100 84 C 124 76, 146 72, 164 76"/>
-        <path d="M100 108 C 74 100, 52 96, 34 101"/><path d="M100 108 C 126 100, 148 96, 166 101"/>
-        <path d="M100 132 C 76 126, 56 122, 40 128"/><path d="M100 132 C 124 126, 144 122, 160 128"/>
-        <path d="M100 156 C 78 151, 60 148, 46 153"/><path d="M100 156 C 122 151, 140 148, 154 153"/>
-        <path d="M100 180 C 82 176, 68 174, 56 178"/><path d="M100 180 C 118 176, 132 174, 144 178"/>
-      </g>
-      <!-- 羽眼（孔雀翎的"眼"） -->
-      <g transform="translate(100 64)">
-        <ellipse rx="34" ry="40" fill="url(#eye)" opacity=".85"/>
-        <ellipse rx="24" ry="28" fill="none" stroke="#e8c15a" stroke-opacity=".5" stroke-width="1.4"/>
-        <ellipse rx="14" ry="16" fill="#0a1420" opacity=".8"/>
-        <ellipse rx="7" ry="8" fill="#e8c15a" opacity=".9"/>
-      </g>
-      <!-- 底部散羽光 -->
-      <g stroke="#43c6e8" stroke-opacity=".18" stroke-width="1" stroke-linecap="round">
-        <path d="M100 236 C 90 252, 82 266, 80 282"/><path d="M100 236 C 110 252, 118 266, 120 282"/>
-        <path d="M100 248 C 95 262, 92 272, 91 284"/><path d="M100 248 C 105 262, 108 272, 109 284"/>
-      </g>
-    </svg>
-  </div>
-
-  <div class="hero" id="hero">
-    <h1>孔雀翎</h1>
-    <p>说出你想要的画面，或<b>拖入一张图</b> — 智能体开始工作</p>
-  </div>
-
-  <div class="chat">
-    <div class="chat-box" id="box">
-      <div class="chat-in">
-        <div class="chat-input">
-          <textarea id="ta" rows="1" placeholder="描述你想要的图像…（支持拖入图片）"></textarea>
+  <!-- 主区 -->
+  <main class="main">
+    <div class="topbar">
+      <div class="credits"><span class="dot"></span>集群在线 · <b>本机 48G</b> + RunningHub</div>
+    </div>
+    <div class="stage">
+      <div class="stage-inner">
+        <div class="hero">
+          <h1>让智能体做你的美术 <em>· 你负责修改与审查</em></h1>
+          <p>输入想法开始一次会话，输入 <b style="color:#a7a7a7">@</b> 添加参考图，输入 <b style="color:#a7a7a7">/</b> 调用工作流</p>
         </div>
-        <div class="chat-foot">
-          <button class="icon-btn" id="pick" title="上传图片">🖼 图片</button>
-          <button class="icon-btn" title="工作流">⚙ 工作流</button>
-          <button class="send disabled" id="send" title="发送">↑</button>
+
+        <div class="prompt" id="prompt">
+          <div class="drop-img" id="dropImg">
+            <img id="dropImgEl" alt="">
+            <div class="cap" id="dropCap"></div>
+            <button class="rm" id="dropRm" title="移除">✕</button>
+          </div>
+          <textarea id="ta" placeholder="描述你想要的图像，或拖一张图进来…"></textarea>
+          <div class="bar">
+            <button class="chip" id="pick"><b>+</b> 添加参考</button>
+            <button class="chip"><b>@</b> 参考图</button>
+            <button class="chip"><b>/</b> 工作流</button>
+            <div class="spacer"></div>
+            <button class="send" id="send" title="开始会话">
+              <svg viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+            </button>
+          </div>
+          <input type="file" id="file" accept="image/*" hidden>
+        </div>
+
+        <div class="sec">
+          <div class="sec-head">
+            <span class="t">Presets</span>
+            <a class="more" href="#">全部示例 →</a>
+          </div>
+          <div class="grid">
+            <div class="card"><div class="art ink"></div><div class="veil"></div><div class="meta"><div class="cat">水墨 · Inpaint</div><div class="ttl">远山留白，墨韵渲染</div></div></div>
+            <div class="card"><div class="art cyber"></div><div class="veil"></div><div class="meta"><div class="cat">赛博 · Gen</div><div class="ttl">霓虹雨夜街道，广角</div></div></div>
+            <div class="card"><div class="art gold"></div><div class="veil"></div><div class="meta"><div class="cat">风光 · Outpaint</div><div class="ttl">黄金麦浪，电影感</div></div></div>
+            <div class="card"><div class="art aurora"></div><div class="veil"></div><div class="meta"><div class="cat">极光 · Style</div><div class="ttl">绿紫极光，长曝</div></div></div>
+            <div class="card"><div class="art lava"></div><div class="veil"></div><div class="meta"><div class="cat">熔岩 · Gen</div><div class="ttl">熔岩裂谷，戏剧光</div></div></div>
+            <div class="card"><div class="art ocean"></div><div class="veil"></div><div class="meta"><div class="cat">深海 · Gen</div><div class="ttl">深海生物，微光</div></div></div>
+          </div>
         </div>
       </div>
     </div>
-    <div class="hints">
-      <span class="hint">将军水墨立绘，背景留白</span>
-      <span class="hint">把这张图转成赛博朋克风</span>
-      <span class="hint">扩展画布到 16:9</span>
-    </div>
-  </div>
-</main>
+  </main>
+</div>
 
-<div class="veil" id="veil"><span>松开 · 图片进入对话区</span></div>
+<div class="dragveil" id="dragveil">
+  <div class="box">
+    <div class="ic">⬇</div>
+    <div class="tx">松开 · 图片进入对话区</div>
+    <div class="sub">作为本次会话的参考图</div>
+  </div>
+</div>
 
 <script>
   const ta = document.getElementById('ta');
-  const box = document.getElementById('box');
-  const send = document.getElementById('send');
-  const dz = document.getElementById('dz');
-  const dzImg = document.getElementById('dzImg');
-  const dzTag = document.getElementById('dzTag');
-  const veil = document.getElementById('veil');
-  const hero = document.getElementById('hero');
-  const emblem = document.getElementById('emblem');
+  const file = document.getElementById('file');
+  const pick = document.getElementById('pick');
+  const prompt = document.getElementById('prompt');
+  const dropImg = document.getElementById('dropImg');
+  const dropImgEl = document.getElementById('dropImgEl');
+  const dropCap = document.getElementById('dropCap');
+  const dropRm = document.getElementById('dropRm');
+  const dragveil = document.getElementById('dragveil');
 
-  ta.addEventListener('input', () => {
-    ta.style.height = 'auto';
-    ta.style.height = Math.min(ta.scrollHeight, 130) + 'px';
-    send.classList.toggle('disabled', !ta.value.trim() && !dz.classList.contains('has'));
-  });
+  ta.addEventListener('input', () => { ta.style.height = 'auto'; ta.style.height = ta.scrollHeight + 'px'; });
 
-  document.querySelectorAll('.hint').forEach(h => h.addEventListener('click', () => {
-    ta.value = h.textContent.replace('◈ ',''); ta.dispatchEvent(new Event('input')); ta.focus();
-  }));
-
-  function clearDz() {
-    dz.classList.remove('has'); dzImg.src = '';
-    emblem.style.display = ''; emblem.classList.remove('dim');
-    hero.style.display = '';
-    send.classList.toggle('disabled', !ta.value.trim());
+  function setImg(file) {
+    if (!file || !file.type.startsWith('image/')) return;
+    const url = URL.createObjectURL(file);
+    dropImgEl.src = url;
+    dropCap.textContent = file.name;
+    dropImg.classList.add('on');
+    prompt.scrollIntoView({ behavior: 'smooth', block: 'center' });
   }
+  dropRm.onclick = () => { dropImg.classList.remove('on'); dropImgEl.src = ''; };
+  pick.onclick = () => file.click();
+  file.onchange = () => setImg(file.files[0]);
 
-  function setImage(file) {
-    const r = new FileReader();
-    r.onload = e => {
-      dzImg.src = e.target.result;
-      dzTag.textContent = file.name;
-      dz.classList.add('has');
-      emblem.style.display = 'none';
-      send.classList.remove('disabled');
-    };
-    r.readAsDataURL(file);
-  }
-
-  let dragDepth = 0;
+  let depth = 0;
   window.addEventListener('dragenter', e => {
-    e.preventDefault(); dragDepth++;
-    if (e.dataTransfer.types.includes('Files')) { veil.classList.add('on'); box.classList.add('dragover'); }
+    e.preventDefault();
+    if (e.dataTransfer.types.includes('Files')) { depth++; dragveil.classList.add('on'); }
   });
   window.addEventListener('dragleave', e => {
-    e.preventDefault(); if (--dragDepth <= 0) { dragDepth = 0; veil.classList.remove('on'); box.classList.remove('dragover'); }
+    e.preventDefault();
+    if (--depth <= 0) { depth = 0; dragveil.classList.remove('on'); }
   });
   window.addEventListener('dragover', e => e.preventDefault());
   window.addEventListener('drop', e => {
-    e.preventDefault(); dragDepth = 0; veil.classList.remove('on'); box.classList.remove('dragover');
-    const f = [...e.dataTransfer.files].find(f => f.type.startsWith('image/'));
-    if (f) setImage(f);
+    e.preventDefault(); depth = 0; dragveil.classList.remove('on');
+    const f = e.dataTransfer.files[0];
+    if (f && f.type.startsWith('image/')) setImg(f);
   });
 
-  document.getElementById('pick').addEventListener('click', () => {
-    const i = document.createElement('input');
-    i.type = 'file'; i.accept = 'image/*';
-    i.onchange = () => i.files[0] && setImage(i.files[0]);
-    i.click();
-  });
+  document.getElementById('send').onclick = () => {
+    // 占位：真实版本此处展开工作台
+    ta.style.opacity = '0.4';
+  };
 </script>
 </body>
 </html>
