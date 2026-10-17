@@ -105,6 +105,11 @@ export default function Workbench({ id, title, cover }: { id: string; title: str
   const [aiBusy, setAiBusy] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
   const [mattingError, setMattingError] = useState<string | null>(null);
+  // 文字工具：点击画布 → 弹输入浮层
+  const [textDraft, setTextDraft] = useState<{ x: number; y: number } | null>(null);
+  const [textInput, setTextInput] = useState("");
+  const [textFontSize, setTextFontSize] = useState(48);
+  const [textColor, setTextColor] = useState("#ffffff");
   const [wandTol, setWandTol] = useState(32);
   const [wandClicks, setWandClicks] = useState(0);
   const [lassoLive, setLassoLive] = useState<{ x: number; y: number }[]>([]);
@@ -144,7 +149,7 @@ export default function Workbench({ id, title, cover }: { id: string; title: str
       setZoom(z => Math.min(8, Math.max(0.05, z * k)));
     };
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") { clearSel(); lassoPts.current = []; setLassoLive([]); }
+      if (e.key === "Escape") { clearSel(); lassoPts.current = []; setLassoLive([]); setTextDraft(null); }
       if ((e.ctrlKey || e.metaKey) && e.key === "z") { e.preventDefault(); undo(); }
     };
     el.addEventListener("wheel", onWheel, { passive: false });
@@ -221,6 +226,19 @@ export default function Workbench({ id, title, cover }: { id: string; title: str
   };
   const commitSelection = (sel: Selection) => { setSelection(sel); setSelCanvas(selectionToCanvas(sel)); };
   const clearSel = () => { setSelection(null); setSelCanvas(null); setWandClicks(0); };
+
+  // 放置文字（从输入浮层提交）
+  const commitText = () => {
+    if (!textDraft) return;
+    const content = textInput.trim();
+    if (!content) { setTextDraft(null); return; }
+    pushUndo();
+    setLayers(ls => ls.map(l => l.id === activeLayer
+      ? { ...l, shapes: [{ kind: "text", x: textDraft.x, y: textDraft.y, text: content, fontSize: textFontSize, fill: textColor, opacity: 1 }, ...l.shapes] }
+      : l));
+    setTextDraft(null);
+    setTool("move"); // 放完切回移动工具，避免误触
+  };
 
   // 撤销：填充/清除前把 layers 快照压栈
   const pushUndo = useCallback(() => {
@@ -424,7 +442,9 @@ export default function Workbench({ id, title, cover }: { id: string; title: str
       if (selection) { applySelection(fillColor); }
       else setLayers(ls => ls.map(l => l.id === activeLayer ? { ...l, shapes: [{ kind: "rect", x: 0, y: 0, w: docSize.w, h: docSize.h, fill: fillColor, opacity: 0.35, cornerRadius: 0 }, ...l.shapes] } : l));
     } else if (tool === "text") {
-      setLayers(ls => ls.map(l => l.id === activeLayer ? { ...l, shapes: [{ kind: "text", x: p.x, y: p.y, text: "文字", fontSize: 36, fill: "#ffffff", opacity: 1 }, ...l.shapes] } : l));
+      // 点击画布 → 打开文字输入浮层（在定位处放置）
+      setTextInput("");
+      setTextDraft({ x: Math.round(p.x), y: Math.round(p.y) });
     }
   };
 
@@ -616,64 +636,62 @@ export default function Workbench({ id, title, cover }: { id: string; title: str
         </div>
       </header>
 
-      {/* 选区操作条（有选区时出现） */}
-      {selection && (
-        <div className="flex h-9 items-center gap-2 border-b border-border bg-background/60 px-3 text-[12px]">
-          <span className="text-foreground/50">选区 {selection.w}×{selection.h}</span>
-          {tool === "wand" && <span className="rounded bg-foreground/10 px-1.5 text-[10px] text-foreground/60">魔棒 ×{wandClicks}</span>}
-          <span className="h-4 w-px bg-border" />
-          {tool === "wand" && (
-            <label className="flex items-center gap-1.5 text-foreground/60">
-              <span>容差</span>
-              <input type="range" min={1} max={128} value={wandTol} onChange={e => setWandTol(+e.target.value)}
-                className="h-1 w-20 accent-foreground/60" />
-              <span className="w-6 text-right tabular-nums text-foreground/50">{wandTol}</span>
-            </label>
-          )}
-          <label className="flex items-center gap-1 text-foreground/60">
-            <span>桶色</span>
-            <input type="color" value={fillColor} onChange={e => setFillColor(e.target.value)} className="h-5 w-6 cursor-pointer rounded border border-border bg-transparent" />
-          </label>
-          <button onClick={() => applySelection(fillColor)} title="油漆桶：把选区填成桶色" className="h-6 rounded-md border border-border px-2 text-foreground/70 transition hover:bg-secondary hover:text-foreground">油漆桶</button>
-          <button onClick={() => applySelection(null)} className="h-6 rounded-md border border-border px-2 text-foreground/70 transition hover:bg-secondary hover:text-foreground">清除选区</button>
-          <button onClick={clearSel} className="h-6 rounded-md border border-border px-2 text-foreground/50 transition hover:text-foreground">取消选区 (Esc)</button>
-        </div>
-      )}
-
-      {/* 画笔/橡皮 属性条 */}
-      {(tool === "brush" || tool === "eraser") && (
-        <div className="flex h-9 items-center gap-2 border-b border-border bg-background/60 px-3 text-[12px]">
-          <span className="text-foreground/50">{tool === "brush" ? "画笔" : "橡皮"}</span>
-          <span className="h-4 w-px bg-border" />
-          {tool === "brush" && (
+      {/* 属性栏：恒定 h-9（随工具/选区/报错切换内容，高度永不变化 → 画幅不波动）*/}
+      <div className={`flex h-9 shrink-0 items-center gap-2 border-b px-3 text-[12px] ${mattingError ? "border-red-500/40 bg-red-500/10" : "border-border bg-background/60"}`}>
+        {mattingError ? (
+          <>
+            <span className="shrink-0 font-medium text-red-400">⚠</span>
+            <span className="min-w-0 flex-1 truncate text-red-400" title={mattingError}>{mattingError}</span>
+            <button onClick={() => setMattingError(null)} className="shrink-0 rounded px-1.5 text-red-400/60 hover:bg-red-500/20 hover:text-red-300">✕</button>
+          </>
+        ) : selection ? (
+          <>
+            <span className="text-foreground/50">选区 {selection.w}×{selection.h}</span>
+            {tool === "wand" && <span className="rounded bg-foreground/10 px-1.5 text-[10px] text-foreground/60">魔棒 ×{wandClicks}</span>}
+            <span className="h-4 w-px bg-border" />
+            {tool === "wand" && (
+              <label className="flex items-center gap-1.5 text-foreground/60">
+                <span>容差</span>
+                <input type="range" min={1} max={128} value={wandTol} onChange={e => setWandTol(+e.target.value)}
+                  className="h-1 w-20 accent-foreground/60" />
+                <span className="w-6 text-right tabular-nums text-foreground/50">{wandTol}</span>
+              </label>
+            )}
             <label className="flex items-center gap-1 text-foreground/60">
-              <span>颜色</span>
-              <input type="color" value={brushColor} onChange={e => setBrushColor(e.target.value)} className="h-5 w-6 cursor-pointer rounded border border-border bg-transparent" />
+              <span>桶色</span>
+              <input type="color" value={fillColor} onChange={e => setFillColor(e.target.value)} className="h-5 w-6 cursor-pointer rounded border border-border bg-transparent" />
             </label>
-          )}
-          <label className="flex items-center gap-1.5 text-foreground/60">
-            <span>大小</span>
-            <input type="range" min={1} max={120} value={brushSize} onChange={e => setBrushSize(+e.target.value)} className="h-1 w-24 accent-foreground/60" />
-            <span className="w-8 text-right tabular-nums text-foreground/50">{brushSize}px</span>
-          </label>
-          {tool === "brush" && (
+            <button onClick={() => applySelection(fillColor)} title="油漆桶：把选区填成桶色" className="h-6 rounded-md border border-border px-2 text-foreground/70 transition hover:bg-secondary hover:text-foreground">油漆桶</button>
+            <button onClick={() => applySelection(null)} className="h-6 rounded-md border border-border px-2 text-foreground/70 transition hover:bg-secondary hover:text-foreground">清除选区</button>
+            <button onClick={clearSel} className="h-6 rounded-md border border-border px-2 text-foreground/50 transition hover:text-foreground">取消选区 (Esc)</button>
+          </>
+        ) : (tool === "brush" || tool === "eraser") ? (
+          <>
+            <span className="text-foreground/50">{tool === "brush" ? "画笔" : "橡皮"}</span>
+            <span className="h-4 w-px bg-border" />
+            {tool === "brush" && (
+              <label className="flex items-center gap-1 text-foreground/60">
+                <span>颜色</span>
+                <input type="color" value={brushColor} onChange={e => setBrushColor(e.target.value)} className="h-5 w-6 cursor-pointer rounded border border-border bg-transparent" />
+              </label>
+            )}
             <label className="flex items-center gap-1.5 text-foreground/60">
-              <span>不透明度</span>
-              <input type="range" min={5} max={100} value={brushOpacity * 100} onChange={e => setBrushOpacity(+e.target.value / 100)} className="h-1 w-20 accent-foreground/60" />
-              <span className="w-8 text-right tabular-nums text-foreground/50">{Math.round(brushOpacity * 100)}%</span>
+              <span>大小</span>
+              <input type="range" min={1} max={120} value={brushSize} onChange={e => setBrushSize(+e.target.value)} className="h-1 w-24 accent-foreground/60" />
+              <span className="w-8 text-right tabular-nums text-foreground/50">{brushSize}px</span>
             </label>
-          )}
-        </div>
-      )}
-
-      {/* 抠像报错条 */}
-      {mattingError && (
-        <div className="flex items-center gap-2 border-b border-red-500/40 bg-red-500/10 px-3 py-1.5 text-[12px] text-red-400">
-          <span className="shrink-0 font-medium">⚠</span>
-          <span className="min-w-0 flex-1 break-all">{mattingError}</span>
-          <button onClick={() => setMattingError(null)} className="shrink-0 rounded px-1.5 text-red-400/60 hover:bg-red-500/20 hover:text-red-300">✕</button>
-        </div>
-      )}
+            {tool === "brush" && (
+              <label className="flex items-center gap-1.5 text-foreground/60">
+                <span>不透明度</span>
+                <input type="range" min={5} max={100} value={brushOpacity * 100} onChange={e => setBrushOpacity(+e.target.value / 100)} className="h-1 w-20 accent-foreground/60" />
+                <span className="w-8 text-right tabular-nums text-foreground/50">{Math.round(brushOpacity * 100)}%</span>
+              </label>
+            )}
+          </>
+        ) : (
+          <span className="text-[11px] text-foreground/30">{TOOLS.find(t => t.id === tool)?.label ?? ""}</span>
+        )}
+      </div>
 
       <div className="flex min-h-0 flex-1">
         {/* 左：工具栏 */}
@@ -774,6 +792,38 @@ export default function Workbench({ id, title, cover }: { id: string; title: str
               {cursor && (
                 <div className="absolute bottom-2 left-2 rounded-md bg-black/60 px-2 py-1 text-[10px] tabular-nums text-foreground/60 backdrop-blur">
                   {Math.round(cursor.x)}, {Math.round(cursor.y)}
+                </div>
+              )}
+              {/* 文字输入浮层（点击定位处，绝对定位不占布局）*/}
+              {textDraft && (
+                <div
+                  className="absolute z-40 w-64 -translate-x-1/2 rounded-lg border border-foreground/25 bg-card/95 p-3 shadow-xl backdrop-blur"
+                  style={{ left: viewW / 2 - scroll.x * zoom + textDraft.x * zoom, top: viewH / 2 - scroll.y * zoom + textDraft.y * zoom }}
+                  onMouseDown={(e) => e.stopPropagation()}
+                >
+                  <input
+                    autoFocus
+                    value={textInput}
+                    onChange={(e) => setTextInput(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === "Enter") commitText(); }}
+                    placeholder="输入文字…"
+                    className="mb-2 w-full rounded-md border border-border bg-background/60 px-2 py-1.5 text-sm text-foreground outline-none focus:border-foreground/40"
+                  />
+                  <div className="flex items-center gap-2">
+                    <label className="flex items-center gap-1 text-[11px] text-foreground/60">
+                      色
+                      <input type="color" value={textColor} onChange={e => setTextColor(e.target.value)} className="h-5 w-6 cursor-pointer rounded border border-border bg-transparent" />
+                    </label>
+                    <label className="flex flex-1 items-center gap-1 text-[11px] text-foreground/60">
+                      字号
+                      <input type="range" min={12} max={200} value={textFontSize} onChange={e => setTextFontSize(+e.target.value)} className="h-1 flex-1 accent-foreground/60" />
+                      <span className="w-7 text-right tabular-nums text-foreground/50">{textFontSize}</span>
+                    </label>
+                  </div>
+                  <div className="mt-2 flex justify-end gap-1.5">
+                    <button onClick={() => setTextDraft(null)} className="h-6 rounded-md border border-border px-2 text-[11px] text-foreground/50 transition hover:text-foreground">取消</button>
+                    <button onClick={commitText} className="h-6 rounded-md border border-foreground/40 bg-card px-3 text-[11px] text-foreground/80 transition hover:border-foreground/60">放置</button>
+                  </div>
                 </div>
               )}
             </div>
