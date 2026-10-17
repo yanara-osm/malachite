@@ -164,21 +164,13 @@ export default function Workbench({ id, title, cover }: { id: string; title: str
     const onWheel = (e: WheelEvent) => {
       if (e.button === 1) return; // 中键滚轮：交给平移，不缩放
       e.preventDefault();
-      // 以光标为锚点缩放：光标下的文档像素保持不动
-      // 用 ref 读写 zoom/scroll，避免连续 wheel 事件间闭包错位累积漂移
-      const rect = el.getBoundingClientRect();
-      const mx = e.clientX - rect.left, my = e.clientY - rect.top;
+      // 视口中心锚点缩放：只改 zoom、scroll 不动，画面围绕视口中心稳定缩放。
+      // （光标锚点会让画面围绕光标缩放，光标偏离中心时画面持续漂移，zoom 越大越明显）
       const z = zoomRef.current;
       const nz = Math.min(8, Math.max(0.05, z * (e.deltaY < 0 ? 1.1 : 1 / 1.1)));
       if (nz === z) return;
-      const sx = mx - viewW / 2, sy = my - viewH / 2;
-      const docX = scrollRef.current.x + sx / z;
-      const docY = scrollRef.current.y + sy / z;
-      const nx = docX - sx / nz, ny = docY - sy / nz;
       zoomRef.current = nz;
-      scrollRef.current = { x: nx, y: ny };
       setZoom(nz);
-      setScroll({ x: nx, y: ny });
     };
     const onKey = (e: KeyboardEvent) => {
       if (e.code === "Space") { e.preventDefault(); setSpaceDown(true); return; }
