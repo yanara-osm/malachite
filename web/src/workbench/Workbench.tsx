@@ -80,6 +80,22 @@ export default function Workbench({ id, title, cover }: { id: string; title: str
   const vpRef = useRef<HTMLDivElement>(null);
   const [viewSize, setViewSize] = useState({ w: 900, h: 560 });
   const [docSize, setDocSize] = useState({ w: DOC_W, h: DOC_H });
+
+  // 拖拽新建项目（d 前缀）：文档尺寸 + 底图跟随图片真实长宽比（demo 项目保持 DOC_W/DOC_H）
+  useEffect(() => {
+    if (!id.startsWith("d")) return;
+    const i = new window.Image();
+    i.onload = () => {
+      if (!i.width || !i.height) return;
+      setDocSize({ w: i.width, h: i.height });
+      setLayers(ls => ls.map(l =>
+        l.shapes.some(s => s.kind === "image" && s.src === cover)
+          ? { ...l, shapes: l.shapes.map(s => (s.kind === "image" && s.src === cover ? { ...s, w: i.width, h: i.height } : s)) }
+          : l
+      ));
+    };
+    i.src = cover;
+  }, [id, cover]);
   const [selection, setSelection] = useState<Selection | null>(null);
   const [selCanvas, setSelCanvas] = useState<HTMLCanvasElement | null>(null);
   const [fillColor, setFillColor] = useState("#3c9be8");
