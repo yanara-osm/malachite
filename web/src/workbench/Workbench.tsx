@@ -10,6 +10,7 @@ import { DOC_W, DOC_H, DEFAULT_ADJUST, ADJUST_GROUPS, BLEND_TO_COMPOSITE, BLEND_
 import type { Layer, Tool, StepEntry, BlendMode, ColorAdjust } from "./types";
 import { applyColorGrade, isDefaultAdjust } from "./colorGrade";
 import ColorWheelPicker from "./ColorWheelPicker";
+import ApiAgent, { type ImageSource } from "./ApiAgent";
 import { magicWand, lasso, rectSelection, ellipseSelection, fillSelection, extractSelection, selectionToCanvas, type Selection } from "./selection";
 import { samEmbed, samPredict, samComposite, samSegmentAll, samExtractRegion, samClearCache, type SamPoint, type SamRegion } from "./sam";
 import { loadProjectState, saveProjectState } from "@/lib/autosave";
@@ -891,6 +892,61 @@ export default function Workbench({ id, title, cover }: { id: string; title: str
     }
   };
 
+  // ---- AI API：取图（三来源）+ 结果图进新图层 ----
+  const dataUrlToBlob = async (dataUrl: string): Promise<Blob> => (await fetch(dataUrl)).blob();
+  const canvasToBlob = (canvas: HTMLCanvasElement): Promise<Blob | null> =>
+    new Promise(res => canvas.toBlob(b => res(b), "image/png"));
+  const loadImg = (src: string): Promise<HTMLImageElement> =>
+    new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = src; });
+
+  // 取图：full=整图合成 / layer=活动图层 / selection=当前选区
+  const getImageSource = async (source: ImageSource): Promise<Blob | null> => {
+    try {
+      const st = stageRef.current;
+      if (!st) return null;
+      const snapshotDataUrl = () => {
+        const ov = overlayRef.current;
+        if (ov) { ov.visible(false); ov.batchDraw(); }
+        const d = st.toDataURL({ pixelRatio: 1, mimeType: "image/png" });
+        if (ov) { ov.visible(true); ov.batchDraw(); }
+        return d;
+      };
+      if (source === "full") return await dataUrlToBlob(snapshotDataUrl());
+      if (source === "layer") {
+        const node = layerRefs.current[activeLayer];
+        if (!node) return null;
+        return await canvasToBlob(node.toCanvas());
+      }
+      if (source === "selection") {
+        if (!selection) return null;
+        const dataUrl = snapshotDataUrl();
+        const img = await loadImg(dataUrl);
+        const c = document.createElement("canvas");
+        c.width = selection.w; c.height = selection.h;
+        const ctx = c.getContext("2d")!;
+        ctx.drawImage(img, 0, 0);
+        const out = extractSelection(ctx.getImageData(0, 0, c.width, c.height), selection);
+        const oc = document.createElement("canvas");
+        oc.width = selection.w; oc.height = selection.h;
+        oc.getContext("2d")!.putImageData(out, 0, 0);
+        return await canvasToBlob(oc);
+      }
+      return null;
+    } catch { return null; }
+  };
+
+  // 结果图插入为新图层（置于最上层）
+  const addApiResultImage = async (dataUrl: string, name: string) => {
+    try {
+      const img = await loadImg(dataUrl);
+      pushUndo();
+      const lid = "ai_" + Date.now();
+      setLayers(ls => [...ls, { id: lid, name, visible: true, opacity: 1, shapes: [{ kind: "image", x: 0, y: 0, w: img.naturalWidth, h: img.naturalHeight, src: dataUrl, opacity: 1 }] }]);
+    } catch (e) {
+      console.error("结果图插入失败", e);
+    }
+  };
+
   const importFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     e.target.value = "";
@@ -1348,9 +1404,7 @@ export default function Workbench({ id, title, cover }: { id: string; title: str
           </div>
           <div className="border-t border-border p-3">
             <p className="mb-2 text-[10px] tracking-widest text-foreground/40">智能体</p>
-            <div className="rounded-lg border border-dashed border-border p-3 text-center text-[11px] text-foreground/40">
-              AI 通道待接入（ComfyUI / RunningHub）
-            </div>
+            <ApiAgent onAddImage={addApiResultImage} getImageSource={getImageSource} hasSelection={!!selection} />
           </div>
         </aside>
       </div>

@@ -2,11 +2,35 @@
 // 纯前端 Next.js 静态导出（out/）由本地 http server 提供，
 // 必须设置 COOP/COEP/CORP 头，否则 onnxruntime-web 的 WebGPU/多线程 wasm 不可用
 // （SharedArrayBuffer 需要 crossOriginIsolated，COEP require-corp 才开启）。
-const { app, BrowserWindow } = require("electron");
+const { app, BrowserWindow, ipcMain } = require("electron");
 const http = require("http");
 const fs = require("fs");
 const path = require("path");
 const { URL } = require("url");
+
+// RH 代理：renderer 走主进程请求 RunningHub，绕过浏览器 CORS（Node fetch 无跨域限制）
+ipcMain.handle("rh-proxy", async (_e, opts) => {
+  try {
+    const { url, method = "POST", headers = {}, body, form, apiKey } = opts || {};
+    let reqBody = body;
+    const reqHeaders = { ...headers };
+    if (form) {
+      const fd = new FormData();
+      if (apiKey) fd.append("apiKey", apiKey);
+      if (form.fileType) fd.append("fileType", form.fileType);
+      if (form.file) {
+        fd.append("file", new Blob([Buffer.from(form.file.data, "base64")], { type: form.file.type || "image/png" }), form.file.name || "image.png");
+      }
+      reqBody = fd;
+      delete reqHeaders["Content-Type"];
+    }
+    const res = await fetch(url, { method, headers: reqHeaders, body: reqBody });
+    const buf = Buffer.from(await res.arrayBuffer());
+    return { status: res.status, ok: res.ok, body: buf.toString("base64") };
+  } catch (e) {
+    return { error: String(e?.message || e) };
+  }
+});
 
 // 打包后在 resources/app/out，开发时 ../web/out
 const OUT_DIR = fs.existsSync(path.join(__dirname, "out"))
@@ -97,6 +121,7 @@ app.whenReady().then(async () => {
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,
+      preload: path.join(__dirname, "preload.js"),
     },
   });
 
