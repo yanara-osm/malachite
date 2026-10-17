@@ -82,7 +82,6 @@ export default function Workbench({ id, title, cover }: { id: string; title: str
   const vpRef = useRef<HTMLDivElement>(null);
   const [viewSize, setViewSize] = useState({ w: 900, h: 560 });
   const [docSize, setDocSize] = useState({ w: DOC_W, h: DOC_H });
-  const [dbgNatural, setDbgNatural] = useState("?");
 
   // 拖拽新建项目（d 前缀）：文档尺寸 + 底图跟随图片真实长宽比（demo 项目保持 DOC_W/DOC_H）
   useEffect(() => {
@@ -91,7 +90,6 @@ export default function Workbench({ id, title, cover }: { id: string; title: str
     i.onload = () => {
       const w = i.naturalWidth, h = i.naturalHeight;
       if (!w || !h) return;
-      setDbgNatural(`${w}×${h}`);
       // canvas 规范化：烘焙 EXIF 方向，确保宽高与像素内容一致（手机照片常有旋转元数据）
       const c = document.createElement("canvas");
       c.width = w; c.height = h;
@@ -667,9 +665,6 @@ export default function Workbench({ id, title, cover }: { id: string; title: str
         <Link href="/projects" className="flex h-7 w-7 items-center justify-center rounded-md border border-border text-xs text-foreground/60 transition hover:border-foreground/30 hover:text-foreground">←</Link>
         <span className="text-sm font-medium text-foreground/90">{title}</span>
         <span className="rounded-md border border-border px-2 py-0.5 text-[11px] tabular-nums text-foreground/45">{docSize.w} × {docSize.h} px</span>
-        <span className="rounded-md border border-amber-500/50 bg-amber-500/10 px-2 py-0.5 text-[11px] tabular-nums text-amber-400">
-          DEBUG doc={docSize.w}×{docSize.h} | L1={layers.find(l => l.id === "L1")?.shapes[0] ? (layers.find(l => l.id === "L1")!.shapes[0] as any).w + "×" + (layers.find(l => l.id === "L1")!.shapes[0] as any).h : "?"} | natural={dbgNatural} | zoom={Math.round(zoom*100)}%
-        </span>
         <div className="ml-auto flex items-center gap-1.5">
           <button onClick={() => setZoom(z => Math.min(8, z * 1.2))} className="h-7 w-7 rounded-md border border-border text-sm text-foreground/60 transition hover:text-foreground">+</button>
           <span className="w-12 text-center text-[11px] tabular-nums text-foreground/50">{Math.round(zoom * 100)}%</span>
