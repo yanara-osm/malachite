@@ -39,19 +39,37 @@ export const DEFAULT_ADJUST: ColorAdjust = {
   hue: 0, saturation: 0, vibrance: 0,
 };
 
-// 调色面板的滑块定义（顺序 = UI 顺序，模仿 Camera Raw 基础面板）
-export const ADJUST_FIELDS: { key: keyof ColorAdjust; label: string; min: number; max: number }[] = [
-  { key: "temperature", label: "色温", min: -100, max: 100 },
-  { key: "tint", label: "色调", min: -100, max: 100 },
-  { key: "exposure", label: "曝光", min: -100, max: 100 },
-  { key: "contrast", label: "对比度", min: -100, max: 100 },
-  { key: "highlights", label: "高光", min: -100, max: 100 },
-  { key: "shadows", label: "阴影", min: -100, max: 100 },
-  { key: "whites", label: "白色", min: -100, max: 100 },
-  { key: "blacks", label: "黑色", min: -100, max: 100 },
-  { key: "hue", label: "色相", min: -180, max: 180 },
-  { key: "saturation", label: "饱和度", min: -100, max: 100 },
-  { key: "vibrance", label: "自然饱和度", min: -100, max: 100 },
+// 调色面板的分组定义（模仿 Camera Raw 基础面板：白平衡 / 色调 / 颜色）
+export const ADJUST_GROUPS: {
+  label: string;
+  fields: { key: keyof ColorAdjust; label: string; min: number; max: number }[];
+}[] = [
+  {
+    label: "白平衡",
+    fields: [
+      { key: "temperature", label: "色温", min: -100, max: 100 },
+      { key: "tint", label: "色调", min: -100, max: 100 },
+    ],
+  },
+  {
+    label: "色调",
+    fields: [
+      { key: "exposure", label: "曝光", min: -100, max: 100 },
+      { key: "contrast", label: "对比度", min: -100, max: 100 },
+      { key: "highlights", label: "高光", min: -100, max: 100 },
+      { key: "shadows", label: "阴影", min: -100, max: 100 },
+      { key: "whites", label: "白色", min: -100, max: 100 },
+      { key: "blacks", label: "黑色", min: -100, max: 100 },
+    ],
+  },
+  {
+    label: "颜色",
+    fields: [
+      { key: "hue", label: "色相", min: -180, max: 180 },
+      { key: "saturation", label: "饱和度", min: -100, max: 100 },
+      { key: "vibrance", label: "自然饱和度", min: -100, max: 100 },
+    ],
+  },
 ];
 
 // 混合模式 → canvas globalCompositeOperation（normal 在 canvas 里是 source-over）

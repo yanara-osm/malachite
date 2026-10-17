@@ -6,7 +6,7 @@ import Konva from "konva";
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import Ruler from "./Ruler";
-import { DOC_W, DOC_H, DEFAULT_ADJUST, ADJUST_FIELDS, BLEND_TO_COMPOSITE, BLEND_MODES } from "./types";
+import { DOC_W, DOC_H, DEFAULT_ADJUST, ADJUST_GROUPS, BLEND_TO_COMPOSITE, BLEND_MODES } from "./types";
 import type { Layer, Tool, StepEntry, BlendMode, ColorAdjust } from "./types";
 import { applyColorGrade, isDefaultAdjust } from "./colorGrade";
 import ColorWheelPicker from "./ColorWheelPicker";
@@ -830,6 +830,8 @@ export default function Workbench({ id, title, cover }: { id: string; title: str
   // 当前选中图层的对象 + 调色参数（供样式区 UI 用）
   const activeLayerObj = layers.find(l => l.id === activeLayer) ?? null;
   const activeAdjust = activeLayerObj?.adjust ?? DEFAULT_ADJUST;
+  // 调色分组折叠状态（默认展开「色调」，白平衡/颜色折叠）
+  const [openGroups, setOpenGroups] = useState<Set<string>>(new Set(["色调"]));
 
   // 调色滤镜：layers 变化时对每个图层手动设置滤镜 + 重新 cache（ref 回调时序不可靠）
   useEffect(() => {
@@ -1312,18 +1314,35 @@ export default function Workbench({ id, title, cover }: { id: string; title: str
                   <button onClick={() => resetLayerAdjust(activeLayerObj.id)}
                     className="text-[10px] text-foreground/40 transition hover:text-foreground">重置</button>
                 </div>
-                {ADJUST_FIELDS.map(f => (
-                  <div key={f.key} className="mb-2">
-                    <div className="mb-0.5 flex items-center justify-between">
-                      <span className="text-[10px] text-foreground/50">{f.label}</span>
-                      <span className="text-[10px] tabular-nums text-foreground/70">{Math.round(activeAdjust[f.key])}</span>
+                {ADJUST_GROUPS.map(g => {
+                  const open = openGroups.has(g.label);
+                  return (
+                    <div key={g.label} className="mb-1">
+                      <button
+                        onClick={() => setOpenGroups(prev => {
+                          const n = new Set(prev);
+                          if (n.has(g.label)) n.delete(g.label); else n.add(g.label);
+                          return n;
+                        })}
+                        className="mb-1 flex w-full items-center justify-between rounded px-1 py-0.5 text-[10px] text-foreground/50 transition hover:bg-foreground/5 hover:text-foreground">
+                        <span>{open ? "▾" : "▸"} {g.label}</span>
+                        <span className="text-foreground/35">{g.fields.length} 项</span>
+                      </button>
+                      {open && g.fields.map(f => (
+                        <div key={f.key} className="mb-2">
+                          <div className="mb-0.5 flex items-center justify-between">
+                            <span className="text-[10px] text-foreground/50">{f.label}</span>
+                            <span className="text-[10px] tabular-nums text-foreground/70">{Math.round(activeAdjust[f.key])}</span>
+                          </div>
+                          <input type="range" min={f.min} max={f.max} step={1}
+                            value={Math.round(activeAdjust[f.key])}
+                            onChange={e => setLayerAdjust(activeLayerObj.id, f.key, Number(e.target.value))}
+                            className="w-full cursor-pointer accent-cyan-500" />
+                        </div>
+                      ))}
                     </div>
-                    <input type="range" min={f.min} max={f.max} step={1}
-                      value={Math.round(activeAdjust[f.key])}
-                      onChange={e => setLayerAdjust(activeLayerObj.id, f.key, Number(e.target.value))}
-                      className="w-full cursor-pointer accent-cyan-500" />
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>
