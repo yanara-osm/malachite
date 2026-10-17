@@ -935,13 +935,13 @@ export default function Workbench({ id, title, cover }: { id: string; title: str
     } catch { return null; }
   };
 
-  // 结果图插入为新图层（置于最上层）
+  // 结果图插入为新图层（置于最上层，自动对齐画布）
   const addApiResultImage = async (dataUrl: string, name: string) => {
     try {
-      const img = await loadImg(dataUrl);
       pushUndo();
       const lid = "ai_" + Date.now();
-      setLayers(ls => [...ls, { id: lid, name, visible: true, opacity: 1, shapes: [{ kind: "image", x: 0, y: 0, w: img.naturalWidth, h: img.naturalHeight, src: dataUrl, opacity: 1 }] }]);
+      // 自动对齐画布：铺满当前画布尺寸（无论 RH 返回什么分辨率，如缩放倍数>1）
+      setLayers(ls => [...ls, { id: lid, name, visible: true, opacity: 1, shapes: [{ kind: "image", x: 0, y: 0, w: docSize.w, h: docSize.h, src: dataUrl, opacity: 1 }] }]);
     } catch (e) {
       console.error("结果图插入失败", e);
     }
