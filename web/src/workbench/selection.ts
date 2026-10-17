@@ -51,6 +51,39 @@ export function lasso(
   return { w, h, data: sel };
 }
 
+// 矩形选区：(x0,y0)-(x1,y1) 包围盒内全选
+export function rectSelection(
+  x0: number, y0: number, x1: number, y1: number, w: number, h: number
+): Selection {
+  const sel = new Uint8Array(w * h);
+  const a = Math.min(x0, x1), b = Math.max(x0, x1);
+  const c = Math.min(y0, y1), d = Math.max(y0, y1);
+  const ix0 = Math.max(0, Math.floor(a)), iy0 = Math.max(0, Math.floor(c));
+  const ix1 = Math.min(w, Math.ceil(b)), iy1 = Math.min(h, Math.ceil(d));
+  for (let y = iy0; y < iy1; y++)
+    for (let x = ix0; x < ix1; x++)
+      sel[y * w + x] = 1;
+  return { w, h, data: sel };
+}
+
+// 椭圆选区：(x0,y0)-(x1,y1) 为对角，内切椭圆全选
+export function ellipseSelection(
+  x0: number, y0: number, x1: number, y1: number, w: number, h: number
+): Selection {
+  const sel = new Uint8Array(w * h);
+  const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2;
+  const rx = Math.abs(x1 - x0) / 2, ry = Math.abs(y1 - y0) / 2;
+  if (rx < 1 || ry < 1) return { w, h, data: sel };
+  const ix0 = Math.max(0, Math.floor(cx - rx)), iy0 = Math.max(0, Math.floor(cy - ry));
+  const ix1 = Math.min(w, Math.ceil(cx + rx)), iy1 = Math.min(h, Math.ceil(cy + ry));
+  for (let y = iy0; y < iy1; y++)
+    for (let x = ix0; x < ix1; x++) {
+      const dx = (x - cx) / rx, dy = (y - cy) / ry;
+      if (dx * dx + dy * dy <= 1) sel[y * w + x] = 1;
+    }
+  return { w, h, data: sel };
+}
+
 // 对选区填充颜色（透明=清除）
 export function fillSelection(imgData: ImageData, sel: Selection, color: string | null): ImageData {
   const out = new ImageData(new Uint8ClampedArray(imgData.data), imgData.width, imgData.height);

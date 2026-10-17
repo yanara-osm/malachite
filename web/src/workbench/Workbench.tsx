@@ -1,15 +1,14 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Stage, Layer as KLayer, Rect as KRect, Line as KLine, Image as KImage, Text as KText, Circle as KCircle } from "react-konva";
+import { Stage, Layer as KLayer, Rect as KRect, Line as KLine, Image as KImage, Text as KText, Circle as KCircle, Ellipse as KEllipse } from "react-konva";
 import Konva from "konva";
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import Ruler from "./Ruler";
 import { DOC_W, DOC_H } from "./types";
 import type { Layer, Tool, StepEntry } from "./types";
-import { magicWand, lasso, fillSelection, selectionToCanvas } from "./selection";
-import type { Selection } from "./selection";
+import { magicWand, lasso, rectSelection, ellipseSelection, fillSelection, selectionToCanvas, type Selection } from "./selection";
 
 const KonvaStage = dynamic(() => import("react-konva").then(m => m.Stage), { ssr: false });
 
@@ -39,6 +38,8 @@ const TOOLS: { id: Tool; label: string; icon: string }[] = [
   { id: "text", label: "文字", icon: "T" },
   { id: "wand", label: "魔棒（按颜色选区）", icon: "⚡" },
   { id: "lasso", label: "套索（手绘选区）", icon: "◌" },
+  { id: "rect", label: "矩形选区", icon: "▭" },
+  { id: "ellipse", label: "椭圆选区", icon: "◯" },
 ];
 
 const STEPS: StepEntry[] = [
@@ -91,6 +92,7 @@ export default function Workbench({ id, title, cover }: { id: string; title: str
   const [wandTol, setWandTol] = useState(32);
   const [wandClicks, setWandClicks] = useState(0);
   const [lassoLive, setLassoLive] = useState<{ x: number; y: number }[]>([]);
+  const [dragSel, setDragSel] = useState<{ x0: number; y0: number; x1: number; y1: number } | null>(null);
   const lassoPts = useRef<{ x: number; y: number }[]>([]);
   const undoStack = useRef<Layer[][]>([]);
   const [undoCount, setUndoCount] = useState(0);
@@ -397,6 +399,7 @@ export default function Workbench({ id, title, cover }: { id: string; title: str
     const p = toStage(e);
     if (tool === "wand") { onWand(p.x, p.y); return; }
     if (tool === "lasso") { lassoPts.current = [{ x: p.x, y: p.y }]; drawing.current = true; return; }
+    if (tool === "rect" || tool === "ellipse") { setDragSel({ x0: p.x, y0: p.y, x1: p.x, y1: p.y }); drawing.current = true; return; }
     drawing.current = true;
     if (tool === "brush" || tool === "eraser") {
       pointRef.current = [p.x, p.y, p.x, p.y];
@@ -414,6 +417,7 @@ export default function Workbench({ id, title, cover }: { id: string; title: str
     setCursor({ x: p.x, y: p.y });
     if (!drawing.current) return;
     if (tool === "lasso") { lassoPts.current.push({ x: p.x, y: p.y }); setLassoLive([...lassoPts.current]); return; }
+    if (tool === "rect" || tool === "ellipse") { setDragSel(s => (s ? { ...s, x1: p.x, y1: p.y } : s)); return; }
     if (tool === "brush" || tool === "eraser") {
       pointRef.current = [...pointRef.current, p.x, p.y];
       setStrokes(s => ({ ...s, [activeLayer]: pointRef.current }));
@@ -426,6 +430,16 @@ export default function Workbench({ id, title, cover }: { id: string; title: str
     if (tool === "lasso") {
       if (lassoPts.current.length >= 3) commitSelection(lasso(lassoPts.current, docSize.w, docSize.h));
       lassoPts.current = []; setLassoLive([]);
+      return;
+    }
+    if (tool === "rect" || tool === "ellipse") {
+      if (dragSel) {
+        const sel = tool === "rect"
+          ? rectSelection(dragSel.x0, dragSel.y0, dragSel.x1, dragSel.y1, docSize.w, docSize.h)
+          : ellipseSelection(dragSel.x0, dragSel.y0, dragSel.x1, dragSel.y1, docSize.w, docSize.h);
+        commitSelection(sel);
+      }
+      setDragSel(null);
       return;
     }
     if (pointRef.current.length >= 4) {
@@ -721,6 +735,18 @@ export default function Workbench({ id, title, cover }: { id: string; title: str
                     {selCanvas && <KImage image={selCanvas} x={0} y={0} width={docSize.w} height={docSize.h} opacity={0.85} listening={false} />}
                     {lassoLive.length > 1 && <KLine points={lassoLive.flatMap(p => [p.x, p.y])} stroke="oklch(0.85 0.12 190)" strokeWidth={2 / zoom} dash={[6 / zoom, 4 / zoom]} closed listening={false} />}
                     {lassoLive.length > 0 && <KCircle x={lassoLive[0].x} y={lassoLive[0].y} radius={4 / zoom} fill="oklch(0.85 0.12 190)" listening={false} />}
+                    {dragSel && tool === "rect" && (
+                      <KRect
+                        x={Math.min(dragSel.x0, dragSel.x1)} y={Math.min(dragSel.y0, dragSel.y1)}
+                        width={Math.abs(dragSel.x1 - dragSel.x0)} height={Math.abs(dragSel.y1 - dragSel.y0)}
+                        stroke="oklch(0.85 0.12 190)" strokeWidth={1.5 / zoom} dash={[6 / zoom, 4 / zoom]} fill="rgba(60,220,205,0.12)" listening={false} />
+                    )}
+                    {dragSel && tool === "ellipse" && (
+                      <KEllipse
+                        x={(dragSel.x0 + dragSel.x1) / 2} y={(dragSel.y0 + dragSel.y1) / 2}
+                        radiusX={Math.abs(dragSel.x1 - dragSel.x0) / 2} radiusY={Math.abs(dragSel.y1 - dragSel.y0) / 2}
+                        stroke="oklch(0.85 0.12 190)" strokeWidth={1.5 / zoom} dash={[6 / zoom, 4 / zoom]} fill="rgba(60,220,205,0.12)" listening={false} />
+                    )}
                     {(tool === "brush" || tool === "eraser") && cursor && (
                       <KCircle x={cursor.x} y={cursor.y} radius={brushSize / 2}
                         stroke={tool === "brush" ? brushColor : "rgba(255,255,255,0.8)"} strokeWidth={1 / zoom}
