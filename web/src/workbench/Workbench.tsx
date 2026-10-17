@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Stage, Layer as KLayer, Rect as KRect, Line as KLine, Image as KImage, Text as KText } from "react-konva";
+import { Stage, Layer as KLayer, Rect as KRect, Line as KLine, Image as KImage, Text as KText, Circle as KCircle } from "react-konva";
 import Konva from "konva";
 import dynamic from "next/dynamic";
 import Link from "next/link";
@@ -74,8 +74,12 @@ export default function Workbench({ id, title, cover }: { id: string; title: str
   const [selection, setSelection] = useState<Selection | null>(null);
   const [selCanvas, setSelCanvas] = useState<HTMLCanvasElement | null>(null);
   const [fillColor, setFillColor] = useState("#3c9be8");
+  const [wandTol, setWandTol] = useState(32);
+  const [wandClicks, setWandClicks] = useState(0);
   const [lassoLive, setLassoLive] = useState<{ x: number; y: number }[]>([]);
   const lassoPts = useRef<{ x: number; y: number }[]>([]);
+  const undoStack = useRef<Layer[][]>([]);
+  const [undoCount, setUndoCount] = useState(0);
 
   const viewW = viewSize.w, viewH = viewSize.h;
   const originX = scroll.x - viewW / 2;
@@ -108,7 +112,8 @@ export default function Workbench({ id, title, cover }: { id: string; title: str
       setZoom(z => Math.min(8, Math.max(0.05, z * k)));
     };
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") { setSelection(null); setSelCanvas(null); lassoPts.current = []; setLassoLive([]); }
+      if (e.key === "Escape") { clearSel(); lassoPts.current = []; setLassoLive([]); }
+      if ((e.ctrlKey || e.metaKey) && e.key === "z") { e.preventDefault(); undo(); }
     };
     el.addEventListener("wheel", onWheel, { passive: false });
     window.addEventListener("keydown", onKey);
@@ -162,6 +167,7 @@ export default function Workbench({ id, title, cover }: { id: string; title: str
   // 对当前选区填充/清除 → 结果作为新图层（在活动图层之上）
   const applySelection = (color: string | null) => {
     if (!selection) return;
+    pushUndo();
     (async () => {
       const idata = await stageToImageData();
       if (!idata) return;
@@ -181,14 +187,38 @@ export default function Workbench({ id, title, cover }: { id: string; title: str
     })();
   };
   const commitSelection = (sel: Selection) => { setSelection(sel); setSelCanvas(selectionToCanvas(sel)); };
+  const clearSel = () => { setSelection(null); setSelCanvas(null); setWandClicks(0); };
 
-  // 魔棒：点击处按颜色扩散选区
+  // 撤销：填充/清除前把 layers 快照压栈
+  const pushUndo = useCallback(() => {
+    undoStack.current.push(layers);
+    if (undoStack.current.length > 30) undoStack.current.shift();
+    setUndoCount(undoStack.current.length);
+  }, [layers]);
+  const undo = useCallback(() => {
+    const prev = undoStack.current.pop();
+    if (!prev) return;
+    setLayers(prev);
+    setUndoCount(undoStack.current.length);
+    clearSel();
+  }, []);
+
+  // 魔棒：点击处按颜色扩散选区，多次点击 OR 累积
   const onWand = async (px: number, py: number) => {
     const idata = await stageToImageData();
     if (!idata) return;
     const x = Math.max(0, Math.min(idata.width - 1, Math.round(px)));
     const y = Math.max(0, Math.min(idata.height - 1, Math.round(py)));
-    commitSelection(magicWand(idata, x, y, 32));
+    const newSel = magicWand(idata, x, y, wandTol);
+    // 与现有选区 OR 合并
+    if (selection) {
+      const merged = new Uint8Array(selection.data.length);
+      for (let i = 0; i < merged.length; i++) merged[i] = selection.data[i] | newSel.data[i] ? 1 : 0;
+      commitSelection({ data: merged, w: selection.w, h: selection.h });
+    } else {
+      commitSelection(newSel);
+    }
+    setWandClicks(c => c + 1);
   };
 
   const onStageMouseDown = (e: any) => {
@@ -331,6 +361,10 @@ export default function Workbench({ id, title, cover }: { id: string; title: str
           <span className="w-12 text-center text-[11px] tabular-nums text-foreground/50">{Math.round(zoom * 100)}%</span>
           <button onClick={() => setZoom(z => Math.max(0.05, z / 1.2))} className="h-7 w-7 rounded-md border border-border text-sm text-foreground/60 transition hover:text-foreground">−</button>
           <button onClick={fitView} className="h-7 rounded-md border border-border px-2 text-[11px] text-foreground/60 transition hover:text-foreground">适应</button>
+          <button onClick={undo} disabled={undoCount === 0}
+            className={`h-7 rounded-md border px-2 text-[11px] transition ${undoCount > 0 ? "border-border text-foreground/60 hover:text-foreground" : "cursor-not-allowed border-border/40 text-foreground/25"}`}>
+            撤销 ({undoCount})
+          </button>
           <label className="flex h-7 cursor-pointer items-center rounded-md border border-border px-3 text-[11px] text-foreground/60 transition hover:text-foreground">
             导入 PSD
             <input type="file" accept=".psd,.psb" onChange={importPSD} className="hidden" />
@@ -343,14 +377,23 @@ export default function Workbench({ id, title, cover }: { id: string; title: str
       {selection && (
         <div className="flex h-9 items-center gap-2 border-b border-border bg-background/60 px-3 text-[12px]">
           <span className="text-foreground/50">选区 {selection.w}×{selection.h}</span>
+          {tool === "wand" && <span className="rounded bg-foreground/10 px-1.5 text-[10px] text-foreground/60">魔棒 ×{wandClicks}</span>}
           <span className="h-4 w-px bg-border" />
+          {tool === "wand" && (
+            <label className="flex items-center gap-1.5 text-foreground/60">
+              <span>容差</span>
+              <input type="range" min={1} max={128} value={wandTol} onChange={e => setWandTol(+e.target.value)}
+                className="h-1 w-20 accent-foreground/60" />
+              <span className="w-6 text-right tabular-nums text-foreground/50">{wandTol}</span>
+            </label>
+          )}
           <label className="flex items-center gap-1 text-foreground/60">
             <span>填充色</span>
             <input type="color" value={fillColor} onChange={e => setFillColor(e.target.value)} className="h-5 w-6 cursor-pointer rounded border border-border bg-transparent" />
           </label>
           <button onClick={() => applySelection(fillColor)} className="h-6 rounded-md border border-border px-2 text-foreground/70 transition hover:bg-secondary hover:text-foreground">填充</button>
           <button onClick={() => applySelection(null)} className="h-6 rounded-md border border-border px-2 text-foreground/70 transition hover:bg-secondary hover:text-foreground">清除选区</button>
-          <button onClick={() => { setSelection(null); setSelCanvas(null); }} className="h-6 rounded-md border border-border px-2 text-foreground/50 transition hover:text-foreground">取消选区 (Esc)</button>
+          <button onClick={clearSel} className="h-6 rounded-md border border-border px-2 text-foreground/50 transition hover:text-foreground">取消选区 (Esc)</button>
         </div>
       )}
 
@@ -375,7 +418,8 @@ export default function Workbench({ id, title, cover }: { id: string; title: str
             <div className="w-5 shrink-0">
               <Ruler zoom={zoom} origin={originY} length={viewH} dir="v" />
             </div>
-            <div ref={vpRef} className="relative min-w-0 flex-1 overflow-hidden" style={{ background: "oklch(0.14 0.005 260)" }}>
+            <div ref={vpRef} className="relative min-w-0 flex-1 overflow-hidden"
+              style={{ background: "oklch(0.14 0.005 260)", cursor: tool === "wand" || tool === "lasso" ? "crosshair" : tool === "brush" || tool === "eraser" ? "cell" : "default" }}>
               <div className="absolute" style={{ left: viewW / 2 - scroll.x * zoom, top: viewH / 2 - scroll.y * zoom, width: docSize.w * zoom, height: docSize.h * zoom, background: CHECKER, boxShadow: "0 0 0 1px oklch(0.3 0.01 260), 0 12px 40px -12px black" }}>
                 <KonvaStage
                   ref={stageRef}
@@ -407,6 +451,7 @@ export default function Workbench({ id, title, cover }: { id: string; title: str
                   <KLayer ref={overlayRef}>
                     {selCanvas && <KImage image={selCanvas} x={0} y={0} width={docSize.w} height={docSize.h} opacity={0.85} listening={false} />}
                     {lassoLive.length > 1 && <KLine points={lassoLive.flatMap(p => [p.x, p.y])} stroke="oklch(0.85 0.12 190)" strokeWidth={2 / zoom} dash={[6 / zoom, 4 / zoom]} closed listening={false} />}
+                    {lassoLive.length > 0 && <KCircle x={lassoLive[0].x} y={lassoLive[0].y} radius={4 / zoom} fill="oklch(0.85 0.12 190)" listening={false} />}
                   </KLayer>
                 </KonvaStage>
               </div>
