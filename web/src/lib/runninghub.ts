@@ -295,13 +295,28 @@ export function parseRhAppParams(html: string): RhParam[] {
 
 // 拉取：抓详情页 HTML → 解析参数（Electron 走代理，浏览器直连）
 export async function fetchRhAppParams(webappId: string): Promise<RhParam[]> {
-  const url = `https://www.runninghub.cn/ai-detail/${webappId}`;
+  // 容错：提取纯数字 ID（用户可能粘贴了完整 ai-detail 链接）
+  const idMatch = webappId.trim().match(/(\d{10,})/);
+  const id = idMatch ? idMatch[1] : webappId.trim();
+  if (!id) throw new Error("webappId 为空");
+  const url = `https://www.runninghub.cn/ai-detail/${id}`;
+
   const proxy = typeof window !== "undefined" ? (window as any).rhProxy : undefined;
+  let html: string;
   if (proxy?.fetchHtml) {
     const res = await proxy.fetchHtml(url);
     if (!res?.ok) throw new Error(res?.error || "抓取详情页失败");
-    return parseRhAppParams(res.text);
+    html = res.text;
+  } else {
+    try {
+      html = await (await fetch(url)).text();
+    } catch {
+      throw new Error("浏览器直连 RunningHub 被跨域拦截，请用桌面版 exe 拉取");
+    }
   }
-  const html = await (await fetch(url)).text();
-  return parseRhAppParams(html);
+  const params = parseRhAppParams(html);
+  if (!params.length) {
+    throw new Error(`未解析到输入节点（${id}）：请确认 webappId 正确，且该应用有公开输入参数`);
+  }
+  return params;
 }
