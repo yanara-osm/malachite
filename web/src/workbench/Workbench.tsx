@@ -2,11 +2,14 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Stage, Layer as KLayer, Rect as KRect, Line as KLine, Image as KImage, Text as KText } from "react-konva";
+import Konva from "konva";
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import Ruler from "./Ruler";
 import { DOC_W, DOC_H } from "./types";
 import type { Layer, Tool, StepEntry } from "./types";
+import { magicWand, lasso, fillSelection, selectionToCanvas } from "./selection";
+import type { Selection } from "./selection";
 
 const KonvaStage = dynamic(() => import("react-konva").then(m => m.Stage), { ssr: false });
 
@@ -34,6 +37,8 @@ const TOOLS: { id: Tool; label: string; icon: string }[] = [
   { id: "eraser", label: "橡皮", icon: "◱" },
   { id: "fill", label: "填充", icon: "▣" },
   { id: "text", label: "文字", icon: "T" },
+  { id: "wand", label: "魔棒（按颜色选区）", icon: "⚡" },
+  { id: "lasso", label: "套索（手绘选区）", icon: "◌" },
 ];
 
 const STEPS: StepEntry[] = [
@@ -60,11 +65,17 @@ export default function Workbench({ id, title, cover }: { id: string; title: str
   const [cursor, setCursor] = useState<{ x: number; y: number } | null>(null);
   const [strokes, setStrokes] = useState<Record<string, number[][]>>({});
   const stageRef = useRef<any>(null);
+  const overlayRef = useRef<any>(null);
   const drawing = useRef(false);
   const pointRef = useRef<number[]>([]);
   const vpRef = useRef<HTMLDivElement>(null);
   const [viewSize, setViewSize] = useState({ w: 900, h: 560 });
   const [docSize, setDocSize] = useState({ w: DOC_W, h: DOC_H });
+  const [selection, setSelection] = useState<Selection | null>(null);
+  const [selCanvas, setSelCanvas] = useState<HTMLCanvasElement | null>(null);
+  const [fillColor, setFillColor] = useState("#3c9be8");
+  const [lassoLive, setLassoLive] = useState<{ x: number; y: number }[]>([]);
+  const lassoPts = useRef<{ x: number; y: number }[]>([]);
 
   const viewW = viewSize.w, viewH = viewSize.h;
   const originX = scroll.x - viewW / 2;
@@ -87,7 +98,7 @@ export default function Workbench({ id, title, cover }: { id: string; title: str
     return () => ro.disconnect();
   }, []);
 
-  // 滚轮缩放
+  // 滚轮缩放 + Esc 取消选区
   useEffect(() => {
     const el = vpRef.current;
     if (!el) return;
@@ -96,8 +107,12 @@ export default function Workbench({ id, title, cover }: { id: string; title: str
       const k = e.deltaY < 0 ? 1.1 : 1 / 1.1;
       setZoom(z => Math.min(8, Math.max(0.05, z * k)));
     };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") { setSelection(null); setSelCanvas(null); lassoPts.current = []; setLassoLive([]); }
+    };
     el.addEventListener("wheel", onWheel, { passive: false });
-    return () => el.removeEventListener("wheel", onWheel);
+    window.addEventListener("keydown", onKey);
+    return () => { el.removeEventListener("wheel", onWheel); window.removeEventListener("keydown", onKey); };
   }, []);
 
   const toStage = (e: any) => {
@@ -106,14 +121,88 @@ export default function Workbench({ id, title, cover }: { id: string; title: str
     return st.getPointerPosition() ?? { x: 0, y: 0 };
   };
 
+  // 把当前画面在 1:1 文档坐标读成 ImageData（离屏 Konva 重建，采样精确）
+  const stageToImageData = async (): Promise<ImageData | null> => {
+    const st = stageRef.current;
+    if (!st) return null;
+    // 离屏 stage，尺寸 = 文档尺寸，scale 1:1
+    const offDiv = document.createElement("div");
+    const off = new Konva.Stage({
+      container: offDiv,
+      width: docSize.w,
+      height: docSize.h,
+      scaleX: 1,
+      scaleY: 1,
+    });
+    offDiv.style.cssText = "position:absolute;left:-99999px;top:0;";
+    document.body.appendChild(offDiv);
+    // 把主 stage 每个可见图层的节点克隆进离屏层（只克隆有 name 的真实图层，跳过捕获层/遮罩层）
+    st.children.forEach((layer: any) => {
+      if (!layer.visible() || !layer.name()) return;
+      const cloneLayer = new Konva.Layer({ opacity: layer.opacity() });
+      layer.children.forEach((node: any) => {
+        if (!node.visible()) return;
+        cloneLayer.add(node.clone());
+      });
+      off.add(cloneLayer);
+    });
+    off.draw();
+    const dataUrl = off.toDataURL({ pixelRatio: 1, mimeType: "image/png" });
+    off.destroy();
+    offDiv.remove();
+    const img = new Image();
+    await new Promise<void>((res, rej) => { img.onload = () => res(); img.onerror = rej; img.src = dataUrl; });
+    const c = document.createElement("canvas");
+    c.width = img.width; c.height = img.height;
+    const ctx = c.getContext("2d")!;
+    ctx.drawImage(img, 0, 0);
+    return ctx.getImageData(0, 0, c.width, c.height);
+  };
+
+  // 对当前选区填充/清除 → 结果作为新图层（在活动图层之上）
+  const applySelection = (color: string | null) => {
+    if (!selection) return;
+    (async () => {
+      const idata = await stageToImageData();
+      if (!idata) return;
+      const out = fillSelection(idata, selection, color);
+      const c = document.createElement("canvas");
+      c.width = out.width; c.height = out.height;
+      c.getContext("2d")!.putImageData(out, 0, 0);
+      const dataUrl = c.toDataURL("image/png");
+      const nl: Layer = { id: "sel_" + Date.now(), name: color ? "填充选区" : "清除选区", visible: true, opacity: 1, shapes: [{ kind: "image", x: 0, y: 0, w: out.width, h: out.height, src: dataUrl, opacity: 1 }] };
+      setLayers(ls => {
+        const i = ls.findIndex(l => l.id === activeLayer);
+        const n = [...ls];
+        n.splice(i === -1 ? n.length : i, 0, nl);
+        return n;
+      });
+      setSelection(null); setSelCanvas(null);
+    })();
+  };
+  const commitSelection = (sel: Selection) => { setSelection(sel); setSelCanvas(selectionToCanvas(sel)); };
+
+  // 魔棒：点击处按颜色扩散选区
+  const onWand = async (px: number, py: number) => {
+    const idata = await stageToImageData();
+    if (!idata) return;
+    const x = Math.max(0, Math.min(idata.width - 1, Math.round(px)));
+    const y = Math.max(0, Math.min(idata.height - 1, Math.round(py)));
+    commitSelection(magicWand(idata, x, y, 32));
+  };
+
   const onStageMouseDown = (e: any) => {
     if (tool === "move") return;
-    drawing.current = true;
     const p = toStage(e);
+    if (tool === "wand") { onWand(p.x, p.y); return; }
+    if (tool === "lasso") { lassoPts.current = [{ x: p.x, y: p.y }]; drawing.current = true; return; }
+    drawing.current = true;
     if (tool === "brush" || tool === "eraser") {
       pointRef.current = [p.x, p.y, p.x, p.y];
     } else if (tool === "fill") {
-      setLayers(ls => ls.map(l => l.id === activeLayer ? { ...l, shapes: [{ kind: "rect", x: 0, y: 0, w: DOC_W, h: DOC_H, fill: "rgba(120,220,210,0.35)", opacity: 1, cornerRadius: 0 }, ...l.shapes] } : l));
+      // 有选区→对选区填当前色；无选区→铺满活动层
+      if (selection) { applySelection(fillColor); }
+      else setLayers(ls => ls.map(l => l.id === activeLayer ? { ...l, shapes: [{ kind: "rect", x: 0, y: 0, w: docSize.w, h: docSize.h, fill: fillColor, opacity: 0.35, cornerRadius: 0 }, ...l.shapes] } : l));
     } else if (tool === "text") {
       setLayers(ls => ls.map(l => l.id === activeLayer ? { ...l, shapes: [{ kind: "text", x: p.x, y: p.y, text: "文字", fontSize: 36, fill: "#ffffff", opacity: 1 }, ...l.shapes] } : l));
     }
@@ -123,6 +212,7 @@ export default function Workbench({ id, title, cover }: { id: string; title: str
     const p = toStage(e);
     setCursor({ x: p.x, y: p.y });
     if (!drawing.current) return;
+    if (tool === "lasso") { lassoPts.current.push({ x: p.x, y: p.y }); setLassoLive([...lassoPts.current]); return; }
     if (tool === "brush" || tool === "eraser") {
       pointRef.current = [...pointRef.current, p.x, p.y];
       setStrokes(s => ({ ...s, [activeLayer]: pointRef.current }));
@@ -132,6 +222,11 @@ export default function Workbench({ id, title, cover }: { id: string; title: str
   const endStroke = () => {
     if (!drawing.current) return;
     drawing.current = false;
+    if (tool === "lasso") {
+      if (lassoPts.current.length >= 3) commitSelection(lasso(lassoPts.current, docSize.w, docSize.h));
+      lassoPts.current = []; setLassoLive([]);
+      return;
+    }
     if (pointRef.current.length >= 4) {
       const pts = pointRef.current;
       setLayers(ls => ls.map(l => l.id === activeLayer
@@ -152,11 +247,14 @@ export default function Workbench({ id, title, cover }: { id: string; title: str
 
   const exportPSD = async () => {
     try {
-      const { writePsd, canvasToPsdImage } = await import("ag-psd");
+      const { writePsd } = await import("ag-psd");
       const st = stageRef.current;
       if (!st) return;
+      const ov = overlayRef.current;
+      if (ov) { ov.visible(false); ov.batchDraw(); }
       // Konva Stage 导出 base64 PNG → 画到 canvas → 写 PSD
       const dataUrl = st.toDataURL({ pixelRatio: 1, mimeType: "image/png" });
+      if (ov) { ov.visible(true); ov.batchDraw(); }
       const full = document.createElement("canvas");
       full.width = docSize.w; full.height = docSize.h;
       await new Promise<void>((res, rej) => {
@@ -168,7 +266,7 @@ export default function Workbench({ id, title, cover }: { id: string; title: str
       const psd = writePsd({
         width: docSize.w,
         height: docSize.h,
-        children: [canvasToPsdImage(full)],
+        children: [{ canvas: full, name: "合成", left: 0, top: 0 }],
       });
       const blob = new Blob([psd as unknown as BlobPart], { type: "image/vnd.adobe.photoshop" });
       const url = URL.createObjectURL(blob);
@@ -241,6 +339,21 @@ export default function Workbench({ id, title, cover }: { id: string; title: str
         </div>
       </header>
 
+      {/* 选区操作条（有选区时出现） */}
+      {selection && (
+        <div className="flex h-9 items-center gap-2 border-b border-border bg-background/60 px-3 text-[12px]">
+          <span className="text-foreground/50">选区 {selection.w}×{selection.h}</span>
+          <span className="h-4 w-px bg-border" />
+          <label className="flex items-center gap-1 text-foreground/60">
+            <span>填充色</span>
+            <input type="color" value={fillColor} onChange={e => setFillColor(e.target.value)} className="h-5 w-6 cursor-pointer rounded border border-border bg-transparent" />
+          </label>
+          <button onClick={() => applySelection(fillColor)} className="h-6 rounded-md border border-border px-2 text-foreground/70 transition hover:bg-secondary hover:text-foreground">填充</button>
+          <button onClick={() => applySelection(null)} className="h-6 rounded-md border border-border px-2 text-foreground/70 transition hover:bg-secondary hover:text-foreground">清除选区</button>
+          <button onClick={() => { setSelection(null); setSelCanvas(null); }} className="h-6 rounded-md border border-border px-2 text-foreground/50 transition hover:text-foreground">取消选区 (Esc)</button>
+        </div>
+      )}
+
       <div className="flex min-h-0 flex-1">
         {/* 左：工具栏 */}
         <aside className="flex w-12 shrink-0 flex-col items-center gap-1 border-r border-border py-2">
@@ -274,6 +387,10 @@ export default function Workbench({ id, title, cover }: { id: string; title: str
                   onMouseLeave={endStroke}
                   style={{ position: "absolute", inset: 0 }}
                 >
+                  {/* 全幅透明捕获层：保证空白处点击也派发事件（魔棒/套索/填充落点） */}
+                  <KLayer>
+                    <KRect x={0} y={0} width={docSize.w} height={docSize.h} fill="#fff" opacity={0} listening={true} />
+                  </KLayer>
                   {layers.map(l => l.visible && (
                     <KLayer key={l.id} opacity={l.opacity} name={l.id}>
                       {l.shapes.map((s, i) => {
@@ -286,6 +403,11 @@ export default function Workbench({ id, title, cover }: { id: string; title: str
                       {strokes[l.id] && <KLine points={strokes[l.id]} stroke={tool === "eraser" ? "rgba(0,0,0,0.7)" : "oklch(0.85 0.12 190)"} strokeWidth={tool === "eraser" ? 28 : 8} opacity={0.6} tension={0.5} />}
                     </KLayer>
                   ))}
+                  {/* 选区遮罩 + 套索预览（顶层，不导出） */}
+                  <KLayer ref={overlayRef}>
+                    {selCanvas && <KImage image={selCanvas} x={0} y={0} width={docSize.w} height={docSize.h} opacity={0.85} listening={false} />}
+                    {lassoLive.length > 1 && <KLine points={lassoLive.flatMap(p => [p.x, p.y])} stroke="oklch(0.85 0.12 190)" strokeWidth={2 / zoom} dash={[6 / zoom, 4 / zoom]} closed listening={false} />}
+                  </KLayer>
                 </KonvaStage>
               </div>
               {cursor && (

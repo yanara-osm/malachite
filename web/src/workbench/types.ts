@@ -12,7 +12,7 @@ export interface Layer {
   shapes: ShapeNode[];
 }
 
-export type Tool = "move" | "brush" | "eraser" | "fill" | "text";
+export type Tool = "move" | "brush" | "eraser" | "fill" | "text" | "wand" | "lasso";
 
 export interface StepEntry {
   id: string;
