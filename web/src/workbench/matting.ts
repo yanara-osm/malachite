@@ -9,8 +9,9 @@ let sess: ort.InferenceSession | null = null;
 async function getSession(): Promise<ort.InferenceSession> {
   if (sess) return sess;
   ort.env.wasm.wasmPaths = "/";
+  ort.env.wasm.numThreads = 1;
   sess = await ort.InferenceSession.create("/models/isnet.onnx", {
-    executionProviders: ["webgpu", "wasm"],
+    executionProviders: ["wasm"],
     graphOptimizationLevel: "all",
   });
   return sess;

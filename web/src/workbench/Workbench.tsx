@@ -86,6 +86,7 @@ export default function Workbench({ id, title, cover }: { id: string; title: str
   const [brushSize, setBrushSize] = useState(8);
   const [brushOpacity, setBrushOpacity] = useState(1);
   const [aiBusy, setAiBusy] = useState(false);
+  const [mattingError, setMattingError] = useState<string | null>(null);
   const [wandTol, setWandTol] = useState(32);
   const [wandClicks, setWandClicks] = useState(0);
   const [lassoLive, setLassoLive] = useState<{ x: number; y: number }[]>([]);
@@ -222,6 +223,7 @@ export default function Workbench({ id, title, cover }: { id: string; title: str
     if (!st || aiBusy) return;
     setAiBusy(true);
     try {
+      setMattingError(null);
       // 1. 只取底图（第一个 image 图层）渲染到白底，避免透明棋盘格+多层压平干扰模型
       const c = document.createElement("canvas");
       c.width = docSize.w; c.height = docSize.h;
@@ -258,7 +260,10 @@ export default function Workbench({ id, title, cover }: { id: string; title: str
       ]);
       setActiveLayer(lid);
     } catch (e: any) {
-      alert("抠像失败: " + e.message);
+      const msg = e?.message || String(e);
+      console.error("[抠像失败]", e);
+      setMattingError("抠像失败: " + msg);
+      alert("抠像失败: " + msg);
     } finally {
       setAiBusy(false);
     }
@@ -586,6 +591,15 @@ export default function Workbench({ id, title, cover }: { id: string; title: str
               <span className="w-8 text-right tabular-nums text-foreground/50">{Math.round(brushOpacity * 100)}%</span>
             </label>
           )}
+        </div>
+      )}
+
+      {/* 抠像报错条 */}
+      {mattingError && (
+        <div className="flex items-center gap-2 border-b border-red-500/40 bg-red-500/10 px-3 py-1.5 text-[12px] text-red-400">
+          <span className="shrink-0 font-medium">⚠</span>
+          <span className="min-w-0 flex-1 break-all">{mattingError}</span>
+          <button onClick={() => setMattingError(null)} className="shrink-0 rounded px-1.5 text-red-400/60 hover:bg-red-500/20 hover:text-red-300">✕</button>
         </div>
       )}
 
