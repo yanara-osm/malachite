@@ -1,63 +1,13 @@
 "use client";
 
 import { useRef, useState } from "react";
-import Image from "next/image";
 import Link from "next/link";
-
-const PRESETS = [
-  { title: "水墨山水", sub: "主峰·皴法·留白", img: "/presets/ink.png" },
-  { title: "赛博霓虹", sub: "城市·雨夜·光轨", img: "/presets/cyber.png" },
-  { title: "鎏金浮雕", sub: "质感·金属·暗调", img: "/presets/gold.png" },
-  { title: "极光之夜", sub: "星尘·流动·冷色", img: "/presets/aurora.png" },
-  { title: "熔岩大地", sub: "炽热·肌理·暖调", img: "/presets/lava.png" },
-  { title: "深海秘境", sub: "幽光·悬浮·纵深", img: "/presets/ocean.png" },
-];
 
 const SUGGESTIONS = [
   "把这张照片改成水墨风格，保留主体轮廓",
   "扩展画布到 16:9，补全两侧风景",
   "给角色换一套赛博朋克服装，保持姿态不变",
 ];
-
-function Feather() {
-  return (
-    <svg viewBox="0 0 240 240" className="h-40 w-40 feather-breathe" fill="none" aria-hidden>
-      <defs>
-        <linearGradient id="fbarb" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0%" stopColor="oklch(0.82 0.16 180)" />
-          <stop offset="55%" stopColor="oklch(0.68 0.22 290)" />
-          <stop offset="100%" stopColor="oklch(0.85 0.16 85)" />
-        </linearGradient>
-        <radialGradient id="feye" cx="0.5" cy="0.5" r="0.5">
-          <stop offset="0%" stopColor="oklch(0.85 0.16 85)" />
-          <stop offset="45%" stopColor="oklch(0.68 0.22 290)" />
-          <stop offset="78%" stopColor="oklch(0.45 0.18 240)" />
-          <stop offset="100%" stopColor="oklch(0.82 0.16 180)" />
-        </radialGradient>
-      </defs>
-      {/* 羽轴（翎眼处截止，不拖尾）*/}
-      <path d="M120 20 C118 80 116 130 119 152" stroke="url(#fbarb)" strokeWidth="3" strokeLinecap="round" opacity="0.9" />
-      {/* 羽枝 */}
-      {Array.from({ length: 15 }).map((_, i) => {
-        const y = 40 + i * 11;
-        const len = 60 - i * 3.0;
-        return (
-          <g key={i} stroke="url(#fbarb)" strokeWidth="1.6" strokeLinecap="round" opacity={0.78 - i * 0.022}>
-            <path d={`M119 ${y} Q ${119 - len * 0.55} ${y - 6}, ${119 - len} ${y - 13}`} />
-            <path d={`M121 ${y} Q ${121 + len * 0.55} ${y - 6}, ${121 + len} ${y - 13}`} />
-          </g>
-        );
-      })}
-      {/* 孔雀眼斑 */}
-      <g>
-        <circle cx="120" cy="150" r="32" fill="none" stroke="oklch(0.82 0.16 180 / 0.45)" strokeWidth="1.5" />
-        <circle cx="120" cy="150" r="25" fill="url(#feye)" opacity="0.92" />
-        <circle cx="120" cy="150" r="14" fill="oklch(0.18 0.08 260)" />
-        <circle cx="120" cy="150" r="6.5" fill="oklch(0.88 0.15 85)" />
-      </g>
-    </svg>
-  );
-}
 
 export default function Home() {
   const [text, setText] = useState("");
@@ -104,9 +54,9 @@ export default function Home() {
           项目 →
         </Link>
 
-        {/* 若隐若现孔雀翎 */}
+        {/* 孔雀翎 logo */}
         <div className="fade-up mb-5" style={{ animationDelay: "0.05s" }}>
-          <Feather />
+          <img src="/logo.png" alt="孔雀翎" className="h-40 w-40 object-contain" />
         </div>
 
         <h1 className="fade-up mb-2 text-center text-lg font-medium tracking-wide text-foreground/85" style={{ animationDelay: "0.15s" }}>
@@ -178,24 +128,6 @@ export default function Home() {
           ))}
         </div>
 
-        {/* Presets：炫彩集中地 */}
-        <div className="fade-up mt-9 w-full" style={{ animationDelay: "0.55s" }}>
-          <p className="mb-3 text-xs font-medium tracking-widest text-foreground/55">PRESETS · 示例</p>
-          <div className="grid grid-cols-3 gap-3">
-            {PRESETS.map((p) => (
-              <button key={p.title} onClick={() => setText(p.title)}
-                className="group relative aspect-[4/3] overflow-hidden rounded-xl border border-border">
-                <Image src={p.img} alt={p.title} fill sizes="(max-width:768px) 100vw, 33vw"
-                  className="object-cover transition duration-500 ease-out group-hover:scale-105" />
-                <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/25 to-black/5" />
-                <div className="absolute inset-x-0 bottom-0 p-3 text-left">
-                  <p className="text-sm font-medium text-white/95">{p.title}</p>
-                  <p className="text-[11px] text-white/70">{p.sub}</p>
-                </div>
-              </button>
-            ))}
-          </div>
-        </div>
       </div>
     </main>
   );
