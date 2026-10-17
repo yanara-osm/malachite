@@ -24,10 +24,12 @@ function UseImage(src: string | undefined) {
   return img;
 }
 
-function ImageShape({ s }: { s: any }) {
+function ImageShape({ s, forceSize }: { s: any; forceSize?: { w: number; h: number } }) {
   const img = UseImage(s.src);
   if (!img) return null;
-  return <KImage image={img} x={s.x} y={s.y} width={s.w} height={s.h} opacity={s.opacity} />;
+  const w = forceSize ? forceSize.w : s.w;
+  const h = forceSize ? forceSize.h : s.h;
+  return <KImage image={img} x={s.x} y={s.y} width={w} height={h} opacity={s.opacity} />;
 }
 
 const TOOLS: { id: Tool; label: string; icon: string }[] = [
@@ -80,18 +82,25 @@ export default function Workbench({ id, title, cover }: { id: string; title: str
   const vpRef = useRef<HTMLDivElement>(null);
   const [viewSize, setViewSize] = useState({ w: 900, h: 560 });
   const [docSize, setDocSize] = useState({ w: DOC_W, h: DOC_H });
+  const [dbgNatural, setDbgNatural] = useState("?");
 
   // 拖拽新建项目（d 前缀）：文档尺寸 + 底图跟随图片真实长宽比（demo 项目保持 DOC_W/DOC_H）
-  // 按图层 id "L1" 直接定位底图（不靠 src 字符串比对，dataURL 大且分两次传入时比对会失败）
   useEffect(() => {
     if (!id.startsWith("d")) return;
     const i = new window.Image();
     i.onload = () => {
-      if (!i.width || !i.height) return;
-      setDocSize({ w: i.width, h: i.height });
+      const w = i.naturalWidth, h = i.naturalHeight;
+      if (!w || !h) return;
+      setDbgNatural(`${w}×${h}`);
+      // canvas 规范化：烘焙 EXIF 方向，确保宽高与像素内容一致（手机照片常有旋转元数据）
+      const c = document.createElement("canvas");
+      c.width = w; c.height = h;
+      c.getContext("2d")!.drawImage(i, 0, 0);
+      const normalized = c.toDataURL("image/png");
+      setDocSize({ w, h });
       setLayers(ls => ls.map(l => {
-        if (l.id !== "L1") return l; // 只动底图
-        return { ...l, shapes: l.shapes.map(s => (s.kind === "image" ? { ...s, w: i.width, h: i.height } : s)) };
+        if (l.id !== "L1") return l;
+        return { ...l, shapes: l.shapes.map(s => (s.kind === "image" ? { ...s, src: normalized, w, h } : s)) };
       }));
     };
     i.src = cover;
@@ -120,6 +129,12 @@ export default function Workbench({ id, title, cover }: { id: string; title: str
   // 平移（PS 式）：空格+拖拽 或 中键拖拽
   const [spaceDown, setSpaceDown] = useState(false);
   const pan = useRef<{ sx: number; sy: number; ox: number; oy: number } | null>(null);
+  // zoom/scroll 的同步真相源：连续 wheel 事件间 React 来不及重渲染，
+  // 若 setScroll 读闭包旧 scroll 而 setZoom 拿函数式新 z，两者错位会累积漂移。
+  const zoomRef = useRef(zoom);
+  const scrollRef = useRef(scroll);
+  zoomRef.current = zoom;
+  scrollRef.current = scroll;
 
   const viewW = viewSize.w, viewH = viewSize.h;
   const originX = scroll.x - viewW / 2;
@@ -149,18 +164,21 @@ export default function Workbench({ id, title, cover }: { id: string; title: str
     const onWheel = (e: WheelEvent) => {
       if (e.button === 1) return; // 中键滚轮：交给平移，不缩放
       e.preventDefault();
-      // 以光标为锚点缩放：光标下的文档像素保持不动（否则放大时图会甩出视口）
+      // 以光标为锚点缩放：光标下的文档像素保持不动
+      // 用 ref 读写 zoom/scroll，避免连续 wheel 事件间闭包错位累积漂移
       const rect = el.getBoundingClientRect();
       const mx = e.clientX - rect.left, my = e.clientY - rect.top;
-      setZoom(z => {
-        const nz = Math.min(8, Math.max(0.05, z * (e.deltaY < 0 ? 1.1 : 1 / 1.1)));
-        if (nz === z) return z;
-        const sx = mx - viewW / 2, sy = my - viewH / 2;
-        const docX = scroll.x + sx / z;
-        const docY = scroll.y + sy / z;
-        setScroll({ x: docX - sx / nz, y: docY - sy / nz });
-        return nz;
-      });
+      const z = zoomRef.current;
+      const nz = Math.min(8, Math.max(0.05, z * (e.deltaY < 0 ? 1.1 : 1 / 1.1)));
+      if (nz === z) return;
+      const sx = mx - viewW / 2, sy = my - viewH / 2;
+      const docX = scrollRef.current.x + sx / z;
+      const docY = scrollRef.current.y + sy / z;
+      const nx = docX - sx / nz, ny = docY - sy / nz;
+      zoomRef.current = nz;
+      scrollRef.current = { x: nx, y: ny };
+      setZoom(nz);
+      setScroll({ x: nx, y: ny });
     };
     const onKey = (e: KeyboardEvent) => {
       if (e.code === "Space") { e.preventDefault(); setSpaceDown(true); return; }
@@ -657,6 +675,9 @@ export default function Workbench({ id, title, cover }: { id: string; title: str
         <Link href="/projects" className="flex h-7 w-7 items-center justify-center rounded-md border border-border text-xs text-foreground/60 transition hover:border-foreground/30 hover:text-foreground">←</Link>
         <span className="text-sm font-medium text-foreground/90">{title}</span>
         <span className="rounded-md border border-border px-2 py-0.5 text-[11px] tabular-nums text-foreground/45">{docSize.w} × {docSize.h} px</span>
+        <span className="rounded-md border border-amber-500/50 bg-amber-500/10 px-2 py-0.5 text-[11px] tabular-nums text-amber-400">
+          DEBUG doc={docSize.w}×{docSize.h} | L1={layers.find(l => l.id === "L1")?.shapes[0] ? (layers.find(l => l.id === "L1")!.shapes[0] as any).w + "×" + (layers.find(l => l.id === "L1")!.shapes[0] as any).h : "?"} | natural={dbgNatural} | zoom={Math.round(zoom*100)}%
+        </span>
         <div className="ml-auto flex items-center gap-1.5">
           <button onClick={() => setZoom(z => Math.min(8, z * 1.2))} className="h-7 w-7 rounded-md border border-border text-sm text-foreground/60 transition hover:text-foreground">+</button>
           <span className="w-12 text-center text-[11px] tabular-nums text-foreground/50">{Math.round(zoom * 100)}%</span>
@@ -806,7 +827,7 @@ export default function Workbench({ id, title, cover }: { id: string; title: str
                         if (s.kind === "rect") return <KRect key={i} x={s.x} y={s.y} width={s.w} height={s.h} fill={s.fill} opacity={s.opacity} cornerRadius={s.cornerRadius} />;
                         if (s.kind === "text") return <KText key={i} x={s.x} y={s.y} text={s.text} fontSize={s.fontSize} fill={s.fill} stroke={s.stroke} strokeWidth={s.strokeWidth} opacity={s.opacity} fontFamily="serif" />;
                         if (s.kind === "line") return <KLine key={i} points={s.points} stroke={s.stroke} strokeWidth={s.strokeWidth} opacity={s.opacity} tension={s.tension} lineCap="round" lineJoin="round" />;
-                        if (s.kind === "image") return <ImageShape key={i} s={s} />;
+                        if (s.kind === "image") return <ImageShape key={i} s={s} forceSize={l.id === "L1" ? docSize : undefined} />;
                         return null;
                       })}
                       {strokes[l.id] && <KLine points={strokes[l.id]} stroke={tool === "eraser" ? "rgba(0,0,0,0.7)" : brushColor} strokeWidth={brushSize} opacity={tool === "eraser" ? 0.7 : brushOpacity} tension={0.5} />}
