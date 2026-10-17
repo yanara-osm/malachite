@@ -126,7 +126,7 @@ export default function Workbench({ id, title, cover }: { id: string; title: str
   // SAM 交互态：累积的点、实时 mask 预览
   const [samPoints, setSamPoints] = useState<SamPoint[]>([]);
   const [samMask, setSamMask] = useState<HTMLCanvasElement | null>(null);
-  const samBaseRef = useRef<HTMLCanvasElement | null>(null);
+  const samBaseRef = useRef<{ canvas: HTMLCanvasElement; x: number; y: number; layerId: string } | null>(null);
   const lassoPts = useRef<{ x: number; y: number }[]>([]);
   const undoStack = useRef<Layer[][]>([]);
   const [undoCount, setUndoCount] = useState(0);
@@ -355,28 +355,30 @@ export default function Workbench({ id, title, cover }: { id: string; title: str
     }
   };
 
-  // 取底图 canvas（白底合成，缓存）；key 用于判断底图是否变化
-  const getSamBase = async (): Promise<HTMLCanvasElement> => {
-    if (samBaseRef.current) return samBaseRef.current;
-    const base = layers.find(l => l.visible && l.shapes.some(s => s.kind === "image"));
+  // 取活动图层内容 canvas（用于 SAM），返回 canvas + 图层在文档中的偏移
+  // 优先活动图层；活动图层无 image 时回退第一个 image 图层
+  const getSamBase = async () => {
+    const active = layers.find(l => l.id === activeLayer);
+    const layer = (active && active.shapes.some(s => s.kind === "image"))
+      ? active
+      : layers.find(l => l.visible && l.shapes.some(s => s.kind === "image"));
+    if (!layer) return null;
+    const s = layer.shapes.find(s => s.kind === "image")!;
+    // 按图层 id 缓存；图层变了重新取
+    if (samBaseRef.current?.layerId === layer.id) return samBaseRef.current;
+    const img = await new Promise<HTMLImageElement>((res, rej) => {
+      const i = new Image();
+      i.onload = () => res(i);
+      i.onerror = rej;
+      i.src = s.src;
+    });
     const c = document.createElement("canvas");
-    c.width = docSize.w; c.height = docSize.h;
+    c.width = s.w; c.height = s.h;
     const ctx = c.getContext("2d")!;
-    ctx.fillStyle = "#fff";
-    ctx.fillRect(0, 0, c.width, c.height);
-    if (base) {
-      for (const s of base.shapes.filter(s => s.kind === "image")) {
-        const img = await new Promise<HTMLImageElement>((res, rej) => {
-          const i = new Image();
-          i.onload = () => res(i);
-          i.onerror = rej;
-          i.src = s.src;
-        });
-        ctx.drawImage(img, s.x, s.y, s.w, s.h);
-      }
-    }
-    samBaseRef.current = c;
-    return c;
+    ctx.drawImage(img, 0, 0, s.w, s.h);
+    const ret = { canvas: c, x: s.x, y: s.y, layerId: layer.id };
+    samBaseRef.current = ret;
+    return ret;
   };
 
   // SAM 交互：加一个点（前景/背景），实时刷新 mask 预览
@@ -386,11 +388,13 @@ export default function Workbench({ id, title, cover }: { id: string; title: str
     try {
       setMattingError(null);
       const base = await getSamBase();
-      const key = layers.map(l => l.id).join(",");
-      await samEmbed(base, key); // 首次跑 encoder，之后缓存
-      const pts = [...samPoints, { x: docX, y: docY, label }];
+      if (!base) { setMattingError("没有可分割的图层"); return; }
+      await samEmbed(base.canvas, base.layerId); // 首次跑 encoder，之后按图层缓存
+      // 文档坐标 → 图层局部坐标
+      const lx = docX - base.x, ly = docY - base.y;
+      const pts = [...samPoints, { x: lx, y: ly, label }];
       setSamPoints(pts);
-      const mask = await samPredict(base, pts);
+      const mask = await samPredict(base.canvas, pts);
       setSamMask(mask);
     } catch (e: any) {
       setMattingError("SAM 分割失败：" + (e?.message || e));
@@ -406,10 +410,12 @@ export default function Workbench({ id, title, cover }: { id: string; title: str
     try {
       setMattingError(null);
       const base = await getSamBase();
-      const out = await samComposite(base, samPoints);
+      if (!base) { setMattingError("没有可分割的图层"); return; }
+      const out = await samComposite(base.canvas, samPoints);
       const dataUrl = out.toDataURL("image/png");
       pushUndo();
-      const nl: Layer = { id: "sam_" + Date.now(), name: "SAM 分割", visible: true, opacity: 1, shapes: [{ kind: "image", x: 0, y: 0, w: out.width, h: out.height, src: dataUrl, opacity: 1 }] };
+      // 抠出的结果放回图层在原文档中的位置，保持与原图对齐
+      const nl: Layer = { id: "sam_" + Date.now(), name: "SAM 分割", visible: true, opacity: 1, shapes: [{ kind: "image", x: base.x, y: base.y, w: out.width, h: out.height, src: dataUrl, opacity: 1 }] };
       setLayers(ls => [...ls, nl]);
       setActiveLayer(nl.id);
       samReset();
@@ -968,9 +974,11 @@ export default function Workbench({ id, title, cover }: { id: string; title: str
                   <KLayer ref={overlayRef}>
                     {selCanvas && <KImage image={selCanvas} x={0} y={0} width={docSize.w} height={docSize.h} opacity={0.85} listening={false} />}
                     {/* SAM mask 预览 + 点标记（青色=前景点，红=背景点） */}
-                    {tool === "sam" && samMask && <KImage image={samMask} x={0} y={0} width={docSize.w} height={docSize.h} opacity={0.9} listening={false} />}
+                    {tool === "sam" && samMask && samBaseRef.current && (
+                      <KImage image={samMask} x={samBaseRef.current.x} y={samBaseRef.current.y} width={samMask.width} height={samMask.height} opacity={0.9} listening={false} />
+                    )}
                     {tool === "sam" && samPoints.map((p, i) => (
-                      <KCircle key={i} x={p.x} y={p.y} radius={4 / zoom}
+                      <KCircle key={i} x={p.x + (samBaseRef.current?.x ?? 0)} y={p.y + (samBaseRef.current?.y ?? 0)} radius={4 / zoom}
                         fill={p.label === 1 ? "oklch(0.82 0.16 180)" : "#f43f5e"}
                         stroke="#000" strokeWidth={1 / zoom} listening={false} />
                     ))}
