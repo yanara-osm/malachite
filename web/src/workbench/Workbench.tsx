@@ -472,14 +472,14 @@ export default function Workbench({ id, title, cover }: { id: string; title: str
   };
 
   const onStageMouseDown = (e: any) => {
-    // 平移优先：空格+左键 或 中键（PS 式）
+    // 平移：空格+左键、中键、或抓手工具(move)左键
     const isMiddle = e.evt && e.evt.button === 1;
-    if (spaceDown || isMiddle) {
+    const isMove = tool === "move";
+    if (spaceDown || isMiddle || isMove) {
       e.evt?.preventDefault?.();
       pan.current = { sx: e.evt.clientX, sy: e.evt.clientY, ox: scroll.x, oy: scroll.y };
       return;
     }
-    if (tool === "move") return;
     const p = toStage(e);
     if (tool === "wand") { onWand(p.x, p.y); return; }
     if (tool === "lasso") { lassoPts.current = [{ x: p.x, y: p.y }]; drawing.current = true; return; }
@@ -787,7 +787,7 @@ export default function Workbench({ id, title, cover }: { id: string; title: str
               <Ruler zoom={zoom} origin={originY} length={viewH} dir="v" />
             </div>
             <div ref={vpRef} className="relative min-w-0 flex-1 overflow-hidden"
-              style={{ background: "oklch(0.14 0.005 260)", cursor: spaceDown ? "grab" : tool === "wand" || tool === "lasso" ? "crosshair" : tool === "brush" || tool === "eraser" ? "cell" : "default" }}
+              style={{ background: "oklch(0.14 0.005 260)", cursor: spaceDown || tool === "move" ? "grab" : tool === "wand" || tool === "lasso" ? "crosshair" : tool === "brush" || tool === "eraser" ? "cell" : "default" }}
               onDragEnter={(e) => { e.preventDefault(); setDragOver(true); }}
               onDragOver={(e) => e.preventDefault()}
               onDragLeave={(e) => { e.preventDefault(); setDragOver(false); }}
