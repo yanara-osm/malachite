@@ -123,7 +123,8 @@ export default function Workbench({ id, title, cover }: { id: string; title: str
   const toStage = (e: any) => {
     const st = stageRef.current;
     if (!st) return { x: 0, y: 0 };
-    return st.getPointerPosition() ?? { x: 0, y: 0 };
+    // getRelativePointerPosition 自动换算 Stage position+scale → 文档坐标
+    return st.getRelativePointerPosition() ?? { x: 0, y: 0 };
   };
 
   // 把当前画面在 1:1 文档坐标读成 ImageData（离屏 Konva 重建，采样精确）
