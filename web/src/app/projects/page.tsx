@@ -93,13 +93,21 @@ export default function ProjectPool() {
               href={`/project?id=${p.id}`}
               className="group relative aspect-[4/3] overflow-hidden rounded-xl border border-border transition hover:border-foreground/20"
             >
-              <Image
-                src={p.img}
-                alt={p.title}
-                fill
-                sizes="(max-width:640px) 50vw, 33vw"
-                className="object-cover transition duration-500 ease-out group-hover:scale-105"
-              />
+              {p.img ? (
+                <Image
+                  src={p.img}
+                  alt={p.title}
+                  fill
+                  sizes="(max-width:640px) 50vw, 33vw"
+                  className="object-cover transition duration-500 ease-out group-hover:scale-105"
+                />
+              ) : (
+                <div className="absolute inset-0 flex items-center justify-center bg-card">
+                  <span className="text-xs tabular-nums text-foreground/40">
+                    {p.docSize ? `${p.docSize.w} × ${p.docSize.h}` : "空白画布"}
+                  </span>
+                </div>
+              )}
               <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/20 to-black/5" />
               <div className="absolute inset-x-0 bottom-0 p-3">
                 <p className="truncate text-sm font-medium text-white/95">{p.title}</p>
