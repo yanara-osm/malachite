@@ -316,41 +316,57 @@ export default function Workbench({ id, title, cover }: { id: string; title: str
       const mask = selection.data;
       const out = new Uint8ClampedArray(data);
 
-      // 1. 标记选区内部像素，记录边界像素（选区内且相邻有选区外像素）
-      const isBorder = new Uint8Array(w * h);
-      for (let y = 0; y < h; y++) {
-        for (let x = 0; x < w; x++) {
-          const i = y * w + x;
-          if (!mask[i]) continue;
-          // 检查四邻域是否有非选区像素
-          const hasOutside =
-            (x > 0 && !mask[i - 1]) || (x < w - 1 && !mask[i + 1]) ||
-            (y > 0 && !mask[i - w]) || (y < h - 1 && !mask[i + w]);
-          if (hasOutside) isBorder[i] = 1;
-        }
-      }
+      // 1. 内容识别填充（Fast Marching inpaint）：从选区边界向内重建像素。
+      //    细线/钢丝等窄结构被两侧背景桥接掉——真正的"擦除"，不是模糊。
+      const known = new Uint8Array(w * h);
+      const dist = new Float32Array(w * h).fill(1e9);
+      for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) known[y * w + x] = mask[y * w + x] ? 0 : 1;
 
-      // 2. 多轮扩散：每轮把边界像素颜色向内部传播（取4邻域均值）
-      const ITER = 40; // 扩散轮数（控制填充深度）
-      for (let iter = 0; iter < ITER; iter++) {
-        const next = new Uint8ClampedArray(out);
-        for (let y = 0; y < h; y++) {
-          for (let x = 0; x < w; x++) {
-            const i = y * w + x;
-            if (!mask[i] || isBorder[i]) continue; // 边界和外部不动
-            // 收集选区内已扩散的邻域
-            let r = 0, g = 0, b = 0, a = 0, n = 0;
-            if (x > 0 && mask[i - 1]) { const d = (i-1)*4; r+=out[d];g+=out[d+1];b+=out[d+2];a+=out[d+3];n++; }
-            if (x < w-1 && mask[i+1]) { const d = (i+1)*4; r+=out[d];g+=out[d+1];b+=out[d+2];a+=out[d+3];n++; }
-            if (y > 0 && mask[i-w]) { const d = (i-w)*4; r+=out[d];g+=out[d+1];b+=out[d+2];a+=out[d+3];n++; }
-            if (y < h-1 && mask[i+w]) { const d = (i+w)*4; r+=out[d];g+=out[d+1];b+=out[d+2];a+=out[d+3];n++; }
-            if (n > 0) {
-              const d = i * 4;
-              next[d] = r / n; next[d+1] = g / n; next[d+2] = b / n; next[d+3] = a / n;
-            }
-          }
+      // 最小堆（key = 到已知区距离）
+      const heap: number[] = [];
+      const push = (i: number, k: number) => {
+        dist[i] = k; heap.push(i);
+        let c = heap.length - 1;
+        while (c > 0) { const p = (c - 1) >> 1; if (dist[heap[p]] <= dist[heap[c]]) break; [heap[p], heap[c]] = [heap[c], heap[p]]; c = p; }
+      };
+      const pop = (): number => {
+        const top = heap[0]; const last = heap.pop()!;
+        if (heap.length) {
+          heap[0] = last; let p = 0;
+          for (;;) { const l = p * 2 + 1, r = l + 1; let s = p;
+            if (l < heap.length && dist[heap[l]] < dist[heap[s]]) s = l;
+            if (r < heap.length && dist[heap[r]] < dist[heap[s]]) s = r;
+            if (s === p) break; [heap[p], heap[s]] = [heap[s], heap[p]]; p = s; }
         }
-        out.set(next);
+        return top;
+      };
+      const DIRS = [[-1, 0], [1, 0], [0, -1], [0, 1]];
+      // 种子：选区边界像素
+      for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+        const i = y * w + x; if (!mask[i]) continue;
+        if ((x > 0 && known[i - 1]) || (x < w - 1 && known[i + 1]) || (y > 0 && known[i - w]) || (y < h - 1 && known[i + w])) push(i, 0);
+      }
+      // 逐像素重建：对已知邻域做距离加权平均（越近权重越大）
+      while (heap.length) {
+        const i = pop(); if (known[i]) continue;
+        const x = i % w, y = (i / w) | 0;
+        let r = 0, g = 0, b = 0, a = 0, sw = 0;
+        for (const [dx, dy] of DIRS) {
+          const nx = x + dx, ny = y + dy;
+          if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
+          const ni = ny * w + nx; if (!known[ni]) continue;
+          const wt = 1 / (1 + dist[ni]);
+          const d = ni * 4;
+          r += out[d] * wt; g += out[d + 1] * wt; b += out[d + 2] * wt; a += out[d + 3] * wt; sw += wt;
+        }
+        if (sw > 0) { const d = i * 4; out[d] = r / sw; out[d + 1] = g / sw; out[d + 2] = b / sw; out[d + 3] = a / sw; }
+        known[i] = 1;
+        for (const [dx, dy] of DIRS) {
+          const nx = x + dx, ny = y + dy;
+          if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
+          const ni = ny * w + nx;
+          if (mask[ni] && !known[ni]) push(ni, dist[i] + 1);
+        }
       }
 
       // 3. 结果写回画布（作为新图层）
@@ -708,7 +724,7 @@ export default function Workbench({ id, title, cover }: { id: string; title: str
               className={`flex h-9 w-9 items-center justify-center rounded-lg text-sm transition ${aiBusy ? "animate-pulse text-foreground/40" : "text-foreground/60 hover:bg-foreground/10 hover:text-foreground"}`}>
               ✂
             </button>
-            <button title="快速填充（选区边缘扩散）" onClick={doSmartFill} disabled={aiBusy || !selection}
+            <button title="快速填充（内容识别，擦除细线/钢丝等窄结构）" onClick={doSmartFill} disabled={aiBusy || !selection}
               className={`mt-1 flex h-9 w-9 items-center justify-center rounded-lg text-sm transition ${(aiBusy || !selection) ? "text-foreground/25" : "text-foreground/60 hover:bg-foreground/10 hover:text-foreground"}`}>
               ✦
             </button>
