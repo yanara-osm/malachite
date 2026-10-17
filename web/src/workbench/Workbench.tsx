@@ -208,71 +208,65 @@ export default function Workbench({ id, title, cover }: { id: string; title: str
     clearSel();
   }, []);
 
-  // 智能抠像：当前画面 → rembg → 透明背景 PNG 作为新图层
-  const doMatting = async () => {
-    const st = stageRef.current;
-    if (!st || aiBusy) return;
-    setAiBusy(true);
-    try {
-      // 导出当前画面为 data URL（1:1 文档坐标）
-      const dataUrl = st.toDataURL({ pixelRatio: 1 });
-      const res = await fetch("/api/matting", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ dataUrl }),
-      });
-      if (!res.ok) { const e = await res.json(); alert("抠像失败: " + e.error); return; }
-      const { dataUrl: cutout } = await res.json();
-      // 作为新图层插入
-      pushUndo();
-      const lid = "L" + Date.now();
-      setLayers(ls => [
-        ...ls,
-        { id: lid, name: "智能抠像", visible: true, opacity: 1, shapes: [{ kind: "image", x: 0, y: 0, w: docSize.w, h: docSize.h, src: cutout, opacity: 1 }] },
-      ]);
-      setActiveLayer(lid);
-    } catch (e: any) {
-      alert("抠像失败: " + e.message);
-    } finally {
-      setAiBusy(false);
-    }
-  };
-
-  // 智能填充：选区 mask → ComfyUI inpaint → 填充结果
+  // 智能填充（纯前端）：选区边缘取色 → 多轮向内扩散 → 填充
   const doSmartFill = async () => {
     if (!selection || aiBusy) return;
     setAiBusy(true);
     try {
-      // 1. 当前画面 → data URL
-      const st = stageRef.current;
-      if (!st) return;
-      const imgDataUrl = st.toDataURL({ pixelRatio: 1 });
-      // 2. 选区 mask → 黑色背景白色选区的 PNG data URL
-      const maskCanvas = document.createElement("canvas");
-      maskCanvas.width = selection.w; maskCanvas.height = selection.h;
-      const mctx = maskCanvas.getContext("2d")!;
-      const mimg = mctx.createImageData(selection.w, selection.h);
-      for (let i = 0; i < selection.data.length; i++) {
-        const d = i * 4;
-        mimg.data[d] = mimg.data[d+1] = mimg.data[d+2] = selection.data[i] ? 255 : 0;
-        mimg.data[d+3] = 255;
+      const idata = await stageToImageData();
+      if (!idata) return;
+      const { width: w, height: h, data } = idata;
+      const mask = selection.data;
+      const out = new Uint8ClampedArray(data);
+
+      // 1. 标记选区内部像素，记录边界像素（选区内且相邻有选区外像素）
+      const isBorder = new Uint8Array(w * h);
+      for (let y = 0; y < h; y++) {
+        for (let x = 0; x < w; x++) {
+          const i = y * w + x;
+          if (!mask[i]) continue;
+          // 检查四邻域是否有非选区像素
+          const hasOutside =
+            (x > 0 && !mask[i - 1]) || (x < w - 1 && !mask[i + 1]) ||
+            (y > 0 && !mask[i - w]) || (y < h - 1 && !mask[i + w]);
+          if (hasOutside) isBorder[i] = 1;
+        }
       }
-      mctx.putImageData(mimg, 0, 0);
-      const maskDataUrl = maskCanvas.toDataURL("image/png");
-      // 3. 提交 ComfyUI inpaint
-      const res = await fetch("/api/inpaint", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ image: imgDataUrl, mask: maskDataUrl }),
-      });
-      if (!res.ok) { const e = await res.json(); alert("智能填充失败: " + e.error); return; }
-      const { dataUrl: filled } = await res.json();
-      // 4. 作为新图层
+
+      // 2. 多轮扩散：每轮把边界像素颜色向内部传播（取4邻域均值）
+      const ITER = 40; // 扩散轮数（控制填充深度）
+      for (let iter = 0; iter < ITER; iter++) {
+        const next = new Uint8ClampedArray(out);
+        for (let y = 0; y < h; y++) {
+          for (let x = 0; x < w; x++) {
+            const i = y * w + x;
+            if (!mask[i] || isBorder[i]) continue; // 边界和外部不动
+            // 收集选区内已扩散的邻域
+            let r = 0, g = 0, b = 0, a = 0, n = 0;
+            if (x > 0 && mask[i - 1]) { const d = (i-1)*4; r+=out[d];g+=out[d+1];b+=out[d+2];a+=out[d+3];n++; }
+            if (x < w-1 && mask[i+1]) { const d = (i+1)*4; r+=out[d];g+=out[d+1];b+=out[d+2];a+=out[d+3];n++; }
+            if (y > 0 && mask[i-w]) { const d = (i-w)*4; r+=out[d];g+=out[d+1];b+=out[d+2];a+=out[d+3];n++; }
+            if (y < h-1 && mask[i+w]) { const d = (i+w)*4; r+=out[d];g+=out[d+1];b+=out[d+2];a+=out[d+3];n++; }
+            if (n > 0) {
+              const d = i * 4;
+              next[d] = r / n; next[d+1] = g / n; next[d+2] = b / n; next[d+3] = a / n;
+            }
+          }
+        }
+        out.set(next);
+      }
+
+      // 3. 结果写回画布（作为新图层）
       pushUndo();
+      const resultCanvas = document.createElement("canvas");
+      resultCanvas.width = w; resultCanvas.height = h;
+      const rctx = resultCanvas.getContext("2d")!;
+      rctx.putImageData(new ImageData(out, w, h), 0, 0);
+      const dataUrl = resultCanvas.toDataURL("image/png");
       const lid = "L" + Date.now();
       setLayers(ls => [
         ...ls,
-        { id: lid, name: "智能填充", visible: true, opacity: 1, shapes: [{ kind: "image", x: 0, y: 0, w: docSize.w, h: docSize.h, src: filled, opacity: 1 }] },
+        { id: lid, name: "智能填充", visible: true, opacity: 1, shapes: [{ kind: "image", x: 0, y: 0, w: docSize.w, h: docSize.h, src: dataUrl, opacity: 1 }] },
       ]);
       setActiveLayer(lid);
       clearSel();
@@ -514,12 +508,8 @@ export default function Workbench({ id, title, cover }: { id: string; title: str
           ))}
           {/* AI 区 */}
           <div className="mt-2 w-8 border-t border-border pt-2">
-            <button title="智能抠像（rembg 主体提取）" onClick={doMatting} disabled={aiBusy}
-              className={`flex h-9 w-9 items-center justify-center rounded-lg text-sm transition ${aiBusy ? "animate-pulse text-foreground/40" : "text-foreground/60 hover:bg-foreground/10 hover:text-foreground"}`}>
-              ✂
-            </button>
-            <button title="智能填充（ComfyUI inpaint）" onClick={doSmartFill} disabled={aiBusy || !selection}
-              className={`mt-1 flex h-9 w-9 items-center justify-center rounded-lg text-sm transition ${(aiBusy || !selection) ? "text-foreground/25" : "text-foreground/60 hover:bg-foreground/10 hover:text-foreground"}`}>
+            <button title="智能填充（选区边缘扩散）" onClick={doSmartFill} disabled={aiBusy || !selection}
+              className={`flex h-9 w-9 items-center justify-center rounded-lg text-sm transition ${(aiBusy || !selection) ? "text-foreground/25" : "text-foreground/60 hover:bg-foreground/10 hover:text-foreground"}`}>
               ✦
             </button>
           </div>
