@@ -86,6 +86,7 @@ export default function Workbench({ id, title, cover }: { id: string; title: str
   const [brushSize, setBrushSize] = useState(8);
   const [brushOpacity, setBrushOpacity] = useState(1);
   const [aiBusy, setAiBusy] = useState(false);
+  const [exportOpen, setExportOpen] = useState(false);
   const [mattingError, setMattingError] = useState<string | null>(null);
   const [wandTol, setWandTol] = useState(32);
   const [wandClicks, setWandClicks] = useState(0);
@@ -445,79 +446,111 @@ export default function Workbench({ id, title, cover }: { id: string; title: str
     const n = [...ls]; [n[i], n[j]] = [n[j], n[i]]; return n;
   });
 
-  const exportPSD = async () => {
+  const exportImage = async (fmt: "png" | "jpg" | "webp" | "psd") => {
     try {
-      const { writePsd } = await import("ag-psd");
       const st = stageRef.current;
       if (!st) return;
       const ov = overlayRef.current;
       if (ov) { ov.visible(false); ov.batchDraw(); }
-      // Konva Stage 导出 base64 PNG → 画到 canvas → 写 PSD
-      const dataUrl = st.toDataURL({ pixelRatio: 1, mimeType: "image/png" });
+      const dataUrl = st.toDataURL({ pixelRatio: 1, mimeType: fmt === "jpg" ? "image/jpeg" : fmt === "webp" ? "image/webp" : "image/png" });
       if (ov) { ov.visible(true); ov.batchDraw(); }
       const full = document.createElement("canvas");
       full.width = docSize.w; full.height = docSize.h;
+      const ctx = full.getContext("2d")!;
+      // JPG 不支持透明 → 白底
+      if (fmt === "jpg") { ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, full.width, full.height); }
       await new Promise<void>((res, rej) => {
         const img = new Image();
-        img.onload = () => { full.getContext("2d")!.drawImage(img, 0, 0); res(); };
+        img.onload = () => { ctx.drawImage(img, 0, 0); res(); };
         img.onerror = rej;
         img.src = dataUrl;
       });
-      const psd = writePsd({
-        width: docSize.w,
-        height: docSize.h,
-        children: [{ canvas: full, name: "合成", left: 0, top: 0 }],
-      });
-      const blob = new Blob([psd as unknown as BlobPart], { type: "image/vnd.adobe.photoshop" });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url; a.download = `${id}.psd`; a.click();
-      URL.revokeObjectURL(url);
+      if (fmt === "psd") {
+        const { writePsd } = await import("ag-psd");
+        const psd = writePsd({ width: docSize.w, height: docSize.h, children: [{ canvas: full, name: "合成", left: 0, top: 0 }] });
+        const blob = new Blob([psd as unknown as BlobPart], { type: "image/vnd.adobe.photoshop" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url; a.download = `${id}.psd`; a.click();
+        URL.revokeObjectURL(url);
+      } else {
+        const ext = fmt === "jpg" ? "jpg" : fmt;
+        full.toBlob(blob => {
+          if (!blob) return;
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement("a");
+          a.href = url; a.download = `${id}.${ext}`; a.click();
+          URL.revokeObjectURL(url);
+        }, fmt === "jpg" ? "image/jpeg" : fmt === "webp" ? "image/webp" : "image/png", fmt === "jpg" ? 0.92 : undefined);
+      }
     } catch (err) {
-      console.error("PSD export failed", err);
-      alert("导出 PSD 失败");
+      console.error("Export failed", err);
+      alert("导出失败");
     }
   };
 
-  const importPSD = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const importFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     e.target.value = "";
     if (!file) return;
+    // PSD/PSB → ag-psd 解析多层
+    if (/\.(psd|psb)$/i.test(file.name)) {
+      try {
+        const { readPsd } = await import("ag-psd");
+        const buf = await file.arrayBuffer();
+        const doc = readPsd(buf, { skipLayerImageData: false });
+        setDocSize({ w: doc.width, h: doc.height });
+        const newLayers: Layer[] = [];
+        const kids = doc.children ?? [];
+        for (let i = 0; i < kids.length; i++) {
+          const k = kids[i];
+          const cv: HTMLCanvasElement | undefined = (k as any).canvas;
+          if (!cv) continue;
+          const dataUrl = cv.toDataURL("image/png");
+          newLayers.push({
+            id: `psd_${i}`, name: k.name || `图层 ${i + 1}`, visible: true,
+            opacity: (k.opacity ?? 255) / 255,
+            shapes: [{ kind: "image", x: k.left ?? 0, y: k.top ?? 0, w: cv.width, h: cv.height, src: dataUrl, opacity: 1 }],
+          });
+        }
+        if (newLayers.length) { setLayers(newLayers); setActiveLayer(newLayers[0].id); fitView(); }
+        else alert("该 PSD 没有可解析的图层");
+      } catch (err) {
+        console.error("PSD parse failed", err);
+        alert("PSD 解析失败，请检查文件");
+      }
+      return;
+    }
+    // 通用图片 → 单图层
     try {
-      const { readPsd } = await import("ag-psd");
-      const buf = await file.arrayBuffer();
-      const doc = readPsd(buf, { skipLayerImageData: false });
-      setDocSize({ w: doc.width, h: doc.height });
-      const newLayers: Layer[] = [];
-      const kids = doc.children ?? [];
-      // ag-psd children 自上而下（与画布渲染顺序一致）
-      for (let i = 0; i < kids.length; i++) {
-        const k = kids[i];
-        const cv: HTMLCanvasElement | undefined = (k as any).canvas;
-        if (!cv) continue;
-        const dataUrl = cv.toDataURL("image/png");
-        newLayers.push({
-          id: `psd_${i}`,
-          name: k.name || `图层 ${i + 1}`,
-          visible: true,
-          opacity: (k.opacity ?? 255) / 255,
-          shapes: [{ kind: "image", x: k.left ?? 0, y: k.top ?? 0, w: cv.width, h: cv.height, src: dataUrl, opacity: 1 }],
-        });
-      }
-      if (newLayers.length) {
-        setLayers(newLayers);
-        setActiveLayer(newLayers[0].id);
-        fitView();
-      } else {
-        alert("该 PSD 没有可解析的图层");
-      }
+      const dataUrl = await new Promise<string>((res, rej) => {
+        const r = new FileReader();
+        r.onload = () => res(r.result as string);
+        r.onerror = rej;
+        r.readAsDataURL(file);
+      });
+      const img = new Image();
+      await new Promise<void>((res, rej) => { img.onload = () => res(); img.onerror = rej; img.src = dataUrl; });
+      setDocSize({ w: img.naturalWidth, h: img.naturalHeight });
+      const lid = "L" + Date.now();
+      setLayers([{ id: lid, name: file.name.replace(/\.[^.]+$/, ""), visible: true, opacity: 1, shapes: [{ kind: "image", x: 0, y: 0, w: img.naturalWidth, h: img.naturalHeight, src: dataUrl, opacity: 1 }] }]);
+      setActiveLayer(lid);
+      fitView();
     } catch (err) {
-      console.error("PSD parse failed", err);
-      alert("PSD 解析失败，请检查文件");
+      console.error("Import failed", err);
+      alert("图片导入失败，请检查文件格式");
     }
   };
 
   const activeShapes = useMemo(() => layers.find(l => l.id === activeLayer)?.shapes ?? [], [layers, activeLayer]);
+
+  // 导出下拉：点击外部关闭
+  useEffect(() => {
+    if (!exportOpen) return;
+    const h = () => setExportOpen(false);
+    window.addEventListener("click", h);
+    return () => window.removeEventListener("click", h);
+  }, [exportOpen]);
 
   return (
     <main className="flex h-screen flex-col overflow-hidden bg-background text-foreground">
@@ -536,10 +569,20 @@ export default function Workbench({ id, title, cover }: { id: string; title: str
             撤销 ({undoCount})
           </button>
           <label className="flex h-7 cursor-pointer items-center rounded-md border border-border px-3 text-[11px] text-foreground/60 transition hover:text-foreground">
-            导入 PSD
-            <input type="file" accept=".psd,.psb" onChange={importPSD} className="hidden" />
+            导入
+            <input type="file" accept="image/*,.psd,.psb,.svg,.tiff,.tif,.bmp,.avif" onChange={importFile} className="hidden" />
           </label>
-          <button onClick={exportPSD} className="h-7 rounded-md border border-foreground/30 bg-card px-3 text-[11px] text-foreground/80 transition hover:border-foreground/50">导出 PSD</button>
+          <div className="relative">
+            <button onClick={(e) => { e.stopPropagation(); setExportOpen(o => !o); }} className="h-7 rounded-md border border-foreground/30 bg-card px-3 text-[11px] text-foreground/80 transition hover:border-foreground/50">导出 ▾</button>
+            {exportOpen && (
+              <div onClick={(e) => e.stopPropagation()} className="absolute right-0 top-8 z-50 w-28 overflow-hidden rounded-md border border-border bg-card shadow-lg">
+                {[["png", "PNG（透明）"], ["jpg", "JPG（白底）"], ["webp", "WebP（透明）"], ["psd", "PSD（分层）"]].map(([fmt, label]) => (
+                  <button key={fmt} onClick={() => { setExportOpen(false); exportImage(fmt as "png" | "jpg" | "webp" | "psd"); }}
+                    className="block w-full px-3 py-1.5 text-left text-[11px] text-foreground/75 transition hover:bg-foreground/10 hover:text-foreground">{label}</button>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       </header>
 
