@@ -265,12 +265,7 @@ export default function Workbench({ id, title, cover }: { id: string; title: str
       c.getContext("2d")!.putImageData(out, 0, 0);
       const dataUrl = c.toDataURL("image/png");
       const nl: Layer = { id: "dup_" + Date.now(), name: "抠出选区", visible: true, opacity: 1, shapes: [{ kind: "image", x: 0, y: 0, w: out.width, h: out.height, src: dataUrl, opacity: 1 }] };
-      setLayers(ls => {
-        const i = ls.findIndex(l => l.id === activeLayer);
-        const n = [...ls];
-        n.splice(i === -1 ? n.length : i, 0, nl);
-        return n;
-      });
+      setLayers(ls => [...ls, nl]);
       setActiveLayer(nl.id);
       setSelection(null); setSelCanvas(null);
     })();
