@@ -34,7 +34,7 @@ const TOOLS: { id: Tool; label: string; icon: string }[] = [
   { id: "move", label: "移动", icon: "✥" },
   { id: "brush", label: "画笔", icon: "✎" },
   { id: "eraser", label: "橡皮", icon: "◱" },
-  { id: "fill", label: "填充", icon: "▣" },
+  { id: "fill", label: "油漆桶（填充选区/图层）", icon: "⬒" },
   { id: "text", label: "文字", icon: "T" },
   { id: "wand", label: "魔棒（按颜色选区）", icon: "⚡" },
   { id: "lasso", label: "套索（手绘选区）", icon: "◌" },
@@ -615,10 +615,10 @@ export default function Workbench({ id, title, cover }: { id: string; title: str
             </label>
           )}
           <label className="flex items-center gap-1 text-foreground/60">
-            <span>填充色</span>
+            <span>桶色</span>
             <input type="color" value={fillColor} onChange={e => setFillColor(e.target.value)} className="h-5 w-6 cursor-pointer rounded border border-border bg-transparent" />
           </label>
-          <button onClick={() => applySelection(fillColor)} className="h-6 rounded-md border border-border px-2 text-foreground/70 transition hover:bg-secondary hover:text-foreground">填充</button>
+          <button onClick={() => applySelection(fillColor)} title="油漆桶：把选区填成桶色" className="h-6 rounded-md border border-border px-2 text-foreground/70 transition hover:bg-secondary hover:text-foreground">油漆桶</button>
           <button onClick={() => applySelection(null)} className="h-6 rounded-md border border-border px-2 text-foreground/70 transition hover:bg-secondary hover:text-foreground">清除选区</button>
           <button onClick={clearSel} className="h-6 rounded-md border border-border px-2 text-foreground/50 transition hover:text-foreground">取消选区 (Esc)</button>
         </div>
