@@ -9,6 +9,7 @@ import Ruler from "./Ruler";
 import { DOC_W, DOC_H } from "./types";
 import type { Layer, Tool, StepEntry } from "./types";
 import { magicWand, lasso, rectSelection, ellipseSelection, fillSelection, extractSelection, selectionToCanvas, type Selection } from "./selection";
+import { samSegment } from "./sam";
 
 const KonvaStage = dynamic(() => import("react-konva").then(m => m.Stage), { ssr: false });
 
@@ -42,6 +43,7 @@ const TOOLS: { id: Tool; label: string; icon: string }[] = [
   { id: "lasso", label: "套索（手绘选区）", icon: "◌" },
   { id: "rect", label: "矩形选区", icon: "▭" },
   { id: "ellipse", label: "椭圆选区", icon: "◯" },
+  { id: "sam", label: "SAM 分割（点选物体）", icon: "⌁" },
 ];
 
 const STEPS: StepEntry[] = [
@@ -349,6 +351,45 @@ export default function Workbench({ id, title, cover }: { id: string; title: str
     }
   };
 
+  // SAM 分割：点选物体 → 该物体 mask → 透明背景主体新图层（置于最上层）
+  const doSamSegment = async (docX: number, docY: number) => {
+    const st = stageRef.current;
+    if (!st || aiBusy) return;
+    setAiBusy(true);
+    try {
+      setMattingError(null);
+      // 1. 取底图（第一个 image 图层）合成到白底 canvas
+      const base = layers.find(l => l.visible && l.shapes.some(s => s.kind === "image"));
+      if (!base) { setMattingError("没有底图"); return; }
+      const c = document.createElement("canvas");
+      c.width = docSize.w; c.height = docSize.h;
+      const ctx = c.getContext("2d")!;
+      ctx.fillStyle = "#fff";
+      ctx.fillRect(0, 0, c.width, c.height);
+      for (const s of base.shapes.filter(s => s.kind === "image")) {
+        const img = await new Promise<HTMLImageElement>((res, rej) => {
+          const i = new Image();
+          i.onload = () => res(i);
+          i.onerror = rej;
+          i.src = s.src;
+        });
+        ctx.drawImage(img, s.x, s.y, s.w, s.h);
+      }
+      // 2. SAM 分割（点选物体）
+      const key = layers.map(l => l.id).join(",");
+      const out = await samSegment(c, docX, docY, key);
+      const dataUrl = out.toDataURL("image/png");
+      pushUndo();
+      const nl: Layer = { id: "sam_" + Date.now(), name: "SAM 分割", visible: true, opacity: 1, shapes: [{ kind: "image", x: 0, y: 0, w: out.width, h: out.height, src: dataUrl, opacity: 1 }] };
+      setLayers(ls => [...ls, nl]);
+      setActiveLayer(nl.id);
+    } catch (e: any) {
+      setMattingError("SAM 分割失败：" + (e?.message || e));
+    } finally {
+      setAiBusy(false);
+    }
+  };
+
   // 快速填充（纯前端）：选区边缘取色 → 多轮向内扩散 → 填充
   const doSmartFill = async () => {
     if (!selection || aiBusy) return;
@@ -499,6 +540,7 @@ export default function Workbench({ id, title, cover }: { id: string; title: str
     }
     const p = toStage(e);
     if (tool === "wand") { onWand(p.x, p.y); return; }
+    if (tool === "sam") { doSamSegment(p.x, p.y); return; }
     if (tool === "lasso") { lassoPts.current = [{ x: p.x, y: p.y }]; drawing.current = true; return; }
     if (tool === "rect" || tool === "ellipse") { setDragSel({ x0: p.x, y0: p.y, x1: p.x, y1: p.y }); drawing.current = true; return; }
     drawing.current = true;
