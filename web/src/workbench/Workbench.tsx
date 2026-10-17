@@ -245,14 +245,10 @@ export default function Workbench({ id, title, cover }: { id: string; title: str
       ctx.globalAlpha = 1;
       if (!drew) { alert("没有可抠的底图"); return; }
       const whiteBgUrl = c.toDataURL("image/png");
-      // 2. 提交抠像
-      const res = await fetch("/api/matting", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ dataUrl: whiteBgUrl }),
-      });
-      if (!res.ok) { const e = await res.json(); alert("抠像失败: " + e.error); return; }
-      const { dataUrl: cutout } = await res.json();
+      // 2. 纯前端抠像（onnxruntime-web + WebGPU，零 Python/API）
+      const { smartCutout } = await import("./matting");
+      const cutoutCanvas = await smartCutout(c);
+      const cutout = cutoutCanvas.toDataURL("image/png");
       // 3. 主体图层置于最上层
       pushUndo();
       const lid = "L" + Date.now();
