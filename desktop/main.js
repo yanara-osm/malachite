@@ -32,6 +32,19 @@ ipcMain.handle("rh-proxy", async (_e, opts) => {
   }
 });
 
+// 抓 RunningHub 详情页 HTML（SSR 数据含 workflow 输入节点定义），renderer 侧解析
+ipcMain.handle("rh-fetch", async (_e, url) => {
+  try {
+    const res = await fetch(url, {
+      headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36" },
+    });
+    const text = await res.text();
+    return { ok: true, text };
+  } catch (e) {
+    return { ok: false, error: String(e?.message || e) };
+  }
+});
+
 // 打包后在 resources/app/out，开发时 ../web/out
 const OUT_DIR = fs.existsSync(path.join(__dirname, "out"))
   ? path.join(__dirname, "out")

@@ -3,4 +3,5 @@ const { contextBridge, ipcRenderer } = require("electron");
 
 contextBridge.exposeInMainWorld("rhProxy", {
   request: (opts) => ipcRenderer.invoke("rh-proxy", opts),
+  fetchHtml: (url) => ipcRenderer.invoke("rh-fetch", url),
 });

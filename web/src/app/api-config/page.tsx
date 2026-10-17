@@ -6,6 +6,7 @@ import {
   getApiDefs, saveApiDef, deleteApiDef, getApiKey, setApiKey, newApiId,
   type ApiDef, type ApiParam, type ApiParamType,
 } from "@/lib/apis";
+import { fetchRhAppParams } from "@/lib/runninghub";
 
 const PARAM_TYPES: { value: ApiParamType; label: string }[] = [
   { value: "text", label: "文本" },
@@ -31,6 +32,8 @@ export default function ApiConfigPage() {
   const [defs, setDefs] = useState<ApiDef[]>([]);
   const [editing, setEditing] = useState<ApiDef | null>(null);
   const [keySaved, setKeySaved] = useState(false);
+  const [pulling, setPulling] = useState(false);
+  const [pullMsg, setPullMsg] = useState("");
 
   useEffect(() => {
     setKey(getApiKey());
@@ -80,6 +83,29 @@ export default function ApiConfigPage() {
   const removeParam = (i: number) => {
     if (!editing) return;
     setEditing({ ...editing, params: editing.params.filter((_, idx) => idx !== i) });
+  };
+
+  // 从 RunningHub 详情页自动拉取输入参数（nodeId/fieldName/类型/默认值）
+  const pullParams = async () => {
+    if (!editing || !editing.webappId?.trim()) { setPullMsg("先填 webappId"); return; }
+    setPulling(true); setPullMsg("");
+    try {
+      const params = await fetchRhAppParams(editing.webappId.trim());
+      if (!params.length) { setPullMsg("未解析到输入参数，请核对 webappId"); return; }
+      setEditing({
+        ...editing,
+        params: params.map((p) => ({
+          key: p.key, label: p.label, type: p.type,
+          nodeId: p.nodeId, fieldName: p.fieldName,
+          required: false, default: p.default, min: p.min, max: p.max,
+        })),
+      });
+      setPullMsg(`已拉取 ${params.length} 个参数，可再微调`);
+    } catch (e) {
+      setPullMsg(e instanceof Error ? e.message : "拉取失败");
+    } finally {
+      setPulling(false);
+    }
   };
 
   const input = "w-full rounded-md border border-border bg-card px-2 py-1.5 text-xs text-foreground/90 outline-none focus:border-foreground/30";
@@ -161,7 +187,14 @@ export default function ApiConfigPage() {
               {editing.protocol === "runninghub-ai-app" ? (
                 <div>
                   <label className={label}>webappId *</label>
-                  <input className={input} value={editing.webappId ?? ""} onChange={e => setEditing({ ...editing, webappId: e.target.value })} placeholder="从 ai-detail 链接末尾取" />
+                  <div className="flex gap-1.5">
+                    <input className={input} value={editing.webappId ?? ""} onChange={e => setEditing({ ...editing, webappId: e.target.value })} placeholder="从 ai-detail 链接末尾取" />
+                    <button onClick={pullParams} disabled={pulling}
+                      className="shrink-0 rounded-md border border-border px-2 py-1.5 text-[11px] text-foreground/70 transition hover:bg-secondary hover:text-foreground disabled:opacity-50">
+                      {pulling ? "拉取中…" : "拉取参数"}
+                    </button>
+                  </div>
+                  {pullMsg && <p className="mt-1 text-[10px] text-foreground/50">{pullMsg}</p>}
                 </div>
               ) : (
                 <div>
