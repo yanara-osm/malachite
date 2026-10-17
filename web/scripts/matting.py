@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""智能抠像：输入 PNG → 输出透明背景 PNG（rembg U2-Net，本地单模型）
+"""智能抠像：输入 PNG → 输出透明背景 PNG（rembg isnet-general-use）
 用法: python matting.py <input.png> <output.png>
 """
 import sys
@@ -12,7 +12,7 @@ def main():
     inp, outp = sys.argv[1], sys.argv[2]
     with open(inp, "rb") as f:
         data = f.read()
-    session = new_session("u2net")
+    session = new_session("isnet-general-use")
     out = remove(data, session=session)
     with open(outp, "wb") as f:
         f.write(out)

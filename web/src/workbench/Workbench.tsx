@@ -208,20 +208,41 @@ export default function Workbench({ id, title, cover }: { id: string; title: str
     clearSel();
   }, []);
 
-  // 智能抠像：当前画面 → rembg（本地 U2-Net）→ 透明背景 PNG 作为新图层
+  // 智能抠像：当前画面 → 白底合成 → rembg isnet → 透明背景 PNG 作为新图层
   const doMatting = async () => {
     const st = stageRef.current;
     if (!st || aiBusy) return;
     setAiBusy(true);
     try {
-      const dataUrl = st.toDataURL({ pixelRatio: 1 });
+      // 1. 渲染到白底 canvas（避免透明棋盘格干扰模型）
+      const c = document.createElement("canvas");
+      c.width = docSize.w; c.height = docSize.h;
+      const ctx = c.getContext("2d")!;
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(0, 0, c.width, c.height);
+      // 逐图层绘制（尊重显隐）
+      for (const layer of layers) {
+        if (!layer.visible) continue;
+        for (const shape of layer.shapes) {
+          if (shape.kind === "image" && shape.src) {
+            const img = new Image();
+            await new Promise(r => { img.onload = r; img.src = shape.src; });
+            ctx.globalAlpha = shape.opacity * layer.opacity;
+            ctx.drawImage(img, shape.x, shape.y, shape.w, shape.h);
+          }
+        }
+      }
+      ctx.globalAlpha = 1;
+      const whiteBgUrl = c.toDataURL("image/png");
+      // 2. 提交抠像
       const res = await fetch("/api/matting", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ dataUrl }),
+        body: JSON.stringify({ dataUrl: whiteBgUrl }),
       });
       if (!res.ok) { const e = await res.json(); alert("抠像失败: " + e.error); return; }
       const { dataUrl: cutout } = await res.json();
+      // 3. 作为新图层
       pushUndo();
       const lid = "L" + Date.now();
       setLayers(ls => [
