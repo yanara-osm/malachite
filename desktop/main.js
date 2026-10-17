@@ -118,10 +118,28 @@ function startServer() {
 
 let server;
 
+// 固定端口启动：localStorage 按 origin 隔离，随机端口会让每次启动 origin 都变，
+// 导致项目/API 配置/编辑快照"第二次打开就没了"。固定端口 → origin 稳定 → 数据持久。
+function listenOn(srv, port) {
+  return new Promise((resolve, reject) => {
+    const onOk = () => { srv.removeListener("error", onErr); resolve(); };
+    const onErr = (e) => { srv.removeListener("listening", onOk); reject(e); };
+    srv.once("error", onErr);
+    srv.once("listening", onOk);
+    srv.listen(port, "127.0.0.1");
+  });
+}
+async function listenFixed(srv) {
+  for (const p of [47888, 47889, 47890, 47891, 47892]) {
+    try { await listenOn(srv, p); return p; }
+    catch (e) { if (e.code !== "EADDRINUSE") throw e; }
+  }
+  throw new Error("EADDRINUSE: 所有预留端口均被占用");
+}
+
 app.whenReady().then(async () => {
   server = startServer();
-  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
-  const port = server.address().port;
+  const port = await listenFixed(server);
 
   // 启动 splash（窗口 ready 前的等待期给出视觉反馈）
   const splash = new BrowserWindow({
