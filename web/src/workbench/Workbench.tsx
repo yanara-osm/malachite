@@ -74,6 +74,9 @@ export default function Workbench({ id, title, cover }: { id: string; title: str
   const [selection, setSelection] = useState<Selection | null>(null);
   const [selCanvas, setSelCanvas] = useState<HTMLCanvasElement | null>(null);
   const [fillColor, setFillColor] = useState("#3c9be8");
+  const [brushColor, setBrushColor] = useState("#1c1a17");
+  const [brushSize, setBrushSize] = useState(8);
+  const [brushOpacity, setBrushOpacity] = useState(1);
   const [wandTol, setWandTol] = useState(32);
   const [wandClicks, setWandClicks] = useState(0);
   const [lassoLive, setLassoLive] = useState<{ x: number; y: number }[]>([]);
@@ -398,6 +401,32 @@ export default function Workbench({ id, title, cover }: { id: string; title: str
         </div>
       )}
 
+      {/* 画笔/橡皮 属性条 */}
+      {(tool === "brush" || tool === "eraser") && (
+        <div className="flex h-9 items-center gap-2 border-b border-border bg-background/60 px-3 text-[12px]">
+          <span className="text-foreground/50">{tool === "brush" ? "画笔" : "橡皮"}</span>
+          <span className="h-4 w-px bg-border" />
+          {tool === "brush" && (
+            <label className="flex items-center gap-1 text-foreground/60">
+              <span>颜色</span>
+              <input type="color" value={brushColor} onChange={e => setBrushColor(e.target.value)} className="h-5 w-6 cursor-pointer rounded border border-border bg-transparent" />
+            </label>
+          )}
+          <label className="flex items-center gap-1.5 text-foreground/60">
+            <span>大小</span>
+            <input type="range" min={1} max={120} value={brushSize} onChange={e => setBrushSize(+e.target.value)} className="h-1 w-24 accent-foreground/60" />
+            <span className="w-8 text-right tabular-nums text-foreground/50">{brushSize}px</span>
+          </label>
+          {tool === "brush" && (
+            <label className="flex items-center gap-1.5 text-foreground/60">
+              <span>不透明度</span>
+              <input type="range" min={5} max={100} value={brushOpacity * 100} onChange={e => setBrushOpacity(+e.target.value / 100)} className="h-1 w-20 accent-foreground/60" />
+              <span className="w-8 text-right tabular-nums text-foreground/50">{Math.round(brushOpacity * 100)}%</span>
+            </label>
+          )}
+        </div>
+      )}
+
       <div className="flex min-h-0 flex-1">
         {/* 左：工具栏 */}
         <aside className="flex w-12 shrink-0 flex-col items-center gap-1 border-r border-border py-2">
@@ -445,7 +474,7 @@ export default function Workbench({ id, title, cover }: { id: string; title: str
                         if (s.kind === "image") return <ImageShape key={i} s={s} />;
                         return null;
                       })}
-                      {strokes[l.id] && <KLine points={strokes[l.id]} stroke={tool === "eraser" ? "rgba(0,0,0,0.7)" : "oklch(0.85 0.12 190)"} strokeWidth={tool === "eraser" ? 28 : 8} opacity={0.6} tension={0.5} />}
+                      {strokes[l.id] && <KLine points={strokes[l.id]} stroke={tool === "eraser" ? "rgba(0,0,0,0.7)" : brushColor} strokeWidth={brushSize} opacity={tool === "eraser" ? 0.7 : brushOpacity} tension={0.5} />}
                     </KLayer>
                   ))}
                   {/* 选区遮罩 + 套索预览（顶层，不导出） */}
@@ -453,6 +482,11 @@ export default function Workbench({ id, title, cover }: { id: string; title: str
                     {selCanvas && <KImage image={selCanvas} x={0} y={0} width={docSize.w} height={docSize.h} opacity={0.85} listening={false} />}
                     {lassoLive.length > 1 && <KLine points={lassoLive.flatMap(p => [p.x, p.y])} stroke="oklch(0.85 0.12 190)" strokeWidth={2 / zoom} dash={[6 / zoom, 4 / zoom]} closed listening={false} />}
                     {lassoLive.length > 0 && <KCircle x={lassoLive[0].x} y={lassoLive[0].y} radius={4 / zoom} fill="oklch(0.85 0.12 190)" listening={false} />}
+                    {(tool === "brush" || tool === "eraser") && cursor && (
+                      <KCircle x={cursor.x} y={cursor.y} radius={brushSize / 2}
+                        stroke={tool === "brush" ? brushColor : "rgba(255,255,255,0.8)"} strokeWidth={1 / zoom}
+                        fill="rgba(0,0,0,0)" listening={false} />
+                    )}
                   </KLayer>
                 </KonvaStage>
               </div>
