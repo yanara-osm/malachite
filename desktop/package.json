@@ -33,7 +33,7 @@
     },
     "portable": {
       "artifactName": "Malachite-${version}-portable.exe",
-      "splashImage": "splash.bmp"
+      "splashImage": "D:/projects/malachite/desktop/build/splash.bmp"
     }
   }
 }
