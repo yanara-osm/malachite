@@ -216,31 +216,34 @@ export default function Workbench({ id, title, cover }: { id: string; title: str
     clearSel();
   }, []);
 
-  // 智能抠像：当前画面 → 白底合成 → rembg isnet → 透明背景 PNG 作为新图层
+  // 智能抠像：底图 → 白底合成 → rembg isnet → 透明背景主体图层（置于最上层）
   const doMatting = async () => {
     const st = stageRef.current;
     if (!st || aiBusy) return;
     setAiBusy(true);
     try {
-      // 1. 渲染到白底 canvas（避免透明棋盘格干扰模型）
+      // 1. 只取底图（第一个 image 图层）渲染到白底，避免透明棋盘格+多层压平干扰模型
       const c = document.createElement("canvas");
       c.width = docSize.w; c.height = docSize.h;
       const ctx = c.getContext("2d")!;
       ctx.fillStyle = "#ffffff";
       ctx.fillRect(0, 0, c.width, c.height);
-      // 逐图层绘制（尊重显隐）
+      let drew = false;
       for (const layer of layers) {
-        if (!layer.visible) continue;
+        if (!layer.visible || drew) continue;
         for (const shape of layer.shapes) {
           if (shape.kind === "image" && shape.src) {
             const img = new Image();
             await new Promise(r => { img.onload = r; img.src = shape.src; });
             ctx.globalAlpha = shape.opacity * layer.opacity;
             ctx.drawImage(img, shape.x, shape.y, shape.w, shape.h);
+            drew = true;
+            break;
           }
         }
       }
       ctx.globalAlpha = 1;
+      if (!drew) { alert("没有可抠的底图"); return; }
       const whiteBgUrl = c.toDataURL("image/png");
       // 2. 提交抠像
       const res = await fetch("/api/matting", {
@@ -250,7 +253,7 @@ export default function Workbench({ id, title, cover }: { id: string; title: str
       });
       if (!res.ok) { const e = await res.json(); alert("抠像失败: " + e.error); return; }
       const { dataUrl: cutout } = await res.json();
-      // 3. 作为新图层
+      // 3. 主体图层置于最上层
       pushUndo();
       const lid = "L" + Date.now();
       setLayers(ls => [
