@@ -7,12 +7,20 @@ export interface DragProject {
   steps: number;
 }
 
-const KEY = "malachi...ects";
+const KEY = "malachite:dragprojects";
+// 历史 bug：旧 key 名曾被生成为省略号占位符，读到旧数据时迁移到新 key
+const LEGACY_KEY = "malachi...ects";
 
 export function getDragProjects(): DragProject[] {
   if (typeof window === "undefined") return [];
   try {
-    return JSON.parse(localStorage.getItem(KEY) || "[]");
+    const raw = localStorage.getItem(KEY) ?? localStorage.getItem(LEGACY_KEY);
+    if (raw && localStorage.getItem(KEY) === null) {
+      // 迁移旧 key → 新 key
+      localStorage.setItem(KEY, raw);
+      localStorage.removeItem(LEGACY_KEY);
+    }
+    return JSON.parse(raw || "[]");
   } catch {
     return [];
   }

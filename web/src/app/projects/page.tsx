@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { getDragProjects, saveDragProject, fileToDataUrl, DragProject } from "@/lib/projects";
 
 const PROJECTS = [
@@ -17,6 +17,11 @@ const PROJECTS = [
 export default function ProjectPool() {
   const [dragOver, setDragOver] = useState(false);
   const [dragProjects, setDragProjects] = useState<DragProject[]>([]);
+
+  // mount 时从 localStorage 读回已保存的拖图项目（返回/刷新不丢失）
+  useEffect(() => {
+    setDragProjects(getDragProjects());
+  }, []);
 
   const onDrop = async (e: React.DragEvent) => {
     e.preventDefault();
