@@ -10,6 +10,7 @@ import { DOC_W, DOC_H } from "./types";
 import type { Layer, Tool, StepEntry } from "./types";
 import { magicWand, lasso, rectSelection, ellipseSelection, fillSelection, extractSelection, selectionToCanvas, type Selection } from "./selection";
 import { samEmbed, samPredict, samComposite, samSegmentAll, samExtractRegion, samClearCache, type SamPoint, type SamRegion } from "./sam";
+import { loadProjectState, saveProjectState } from "@/lib/autosave";
 
 const KonvaStage = dynamic(() => import("react-konva").then(m => m.Stage), { ssr: false });
 
@@ -61,6 +62,9 @@ export default function Workbench({ id, title, cover }: { id: string; title: str
   const [scroll, setScroll] = useState({ x: 0, y: 0 });
   const [tool, setTool] = useState<Tool>("brush");
   const [layers, setLayers] = useState<Layer[]>(() => {
+    // 先恢复自动保存的进度（如有），否则用默认底图
+    const saved = loadProjectState(id);
+    if (saved) return saved.layers;
     // 只有水墨 demo 项目带预置图层，其他项目只有底图
     if (id === "ink") {
       return [
@@ -73,7 +77,12 @@ export default function Workbench({ id, title, cover }: { id: string; title: str
       { id: "L1", name: "底图", visible: true, opacity: 1, shapes: [{ kind: "image", x: 0, y: 0, w: DOC_W, h: DOC_H, src: cover, opacity: 1 }] },
     ];
   });
-  const [activeLayer, setActiveLayer] = useState(id === "ink" ? "L3" : "L1");
+  const [activeLayer, setActiveLayer] = useState(() => {
+    const saved = loadProjectState(id);
+    return saved?.activeLayer && saved.layers.some(l => l.id === saved.activeLayer)
+      ? saved.activeLayer
+      : id === "ink" ? "L3" : "L1";
+  });
   const [brushes, setBrushes] = useState<Record<string, { points: number[]; color: string; width: number }>>({});
   const [cursor, setCursor] = useState<{ x: number; y: number } | null>(null);
   const [strokes, setStrokes] = useState<Record<string, number[][]>>({});
@@ -83,11 +92,15 @@ export default function Workbench({ id, title, cover }: { id: string; title: str
   const pointRef = useRef<number[]>([]);
   const vpRef = useRef<HTMLDivElement>(null);
   const [viewSize, setViewSize] = useState({ w: 900, h: 560 });
-  const [docSize, setDocSize] = useState({ w: DOC_W, h: DOC_H });
+  const [docSize, setDocSize] = useState(() => {
+    const saved = loadProjectState(id);
+    return saved?.docSize && saved.docSize.w > 0 && saved.docSize.h > 0 ? saved.docSize : { w: DOC_W, h: DOC_H };
+  });
 
   // 拖拽新建项目（d 前缀）：文档尺寸 + 底图跟随图片真实长宽比（demo 项目保持 DOC_W/DOC_H）
   useEffect(() => {
     if (!id.startsWith("d")) return;
+    if (loadProjectState(id)) return; // 已有自动保存的进度：跳过重新规范化，避免覆盖扩展后的画布尺寸
     const i = new window.Image();
     i.onload = () => {
       const w = i.naturalWidth, h = i.naturalHeight;
@@ -105,6 +118,17 @@ export default function Workbench({ id, title, cover }: { id: string; title: str
     };
     i.src = cover;
   }, [id, cover]);
+
+  // 自动保存：每次编辑（layers/docSize/activeLayer 变化）后 debounce 写入 localStorage
+  useEffect(() => {
+    const t = setTimeout(() => {
+      saveProjectState(id, { layers, docSize, activeLayer }).then(ok => {
+        if (!ok) setMattingError("自动保存失败：项目过大，超出浏览器本地存储上限，请导出备份");
+      });
+    }, 600);
+    return () => clearTimeout(t);
+  }, [layers, docSize, activeLayer, id]);
+
   const [selection, setSelection] = useState<Selection | null>(null);
   const [selCanvas, setSelCanvas] = useState<HTMLCanvasElement | null>(null);
   const [fillColor, setFillColor] = useState("#3c9be8");
