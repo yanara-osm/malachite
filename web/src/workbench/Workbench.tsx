@@ -145,8 +145,18 @@ export default function Workbench({ id, title, cover }: { id: string; title: str
     if (!el) return;
     const onWheel = (e: WheelEvent) => {
       e.preventDefault();
-      const k = e.deltaY < 0 ? 1.1 : 1 / 1.1;
-      setZoom(z => Math.min(8, Math.max(0.05, z * k)));
+      // 以光标为锚点缩放：光标下的文档像素保持不动（否则放大时图会甩出视口）
+      const rect = el.getBoundingClientRect();
+      const mx = e.clientX - rect.left, my = e.clientY - rect.top;
+      setZoom(z => {
+        const nz = Math.min(8, Math.max(0.05, z * (e.deltaY < 0 ? 1.1 : 1 / 1.1)));
+        if (nz === z) return z;
+        const sx = mx - viewW / 2, sy = my - viewH / 2;
+        const docX = scroll.x + sx / z;
+        const docY = scroll.y + sy / z;
+        setScroll({ x: docX - sx / nz, y: docY - sy / nz });
+        return nz;
+      });
     };
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") { clearSel(); lassoPts.current = []; setLassoLive([]); setTextDraft(null); }
@@ -155,7 +165,7 @@ export default function Workbench({ id, title, cover }: { id: string; title: str
     el.addEventListener("wheel", onWheel, { passive: false });
     window.addEventListener("keydown", onKey);
     return () => { el.removeEventListener("wheel", onWheel); window.removeEventListener("keydown", onKey); };
-  }, []);
+  }, [viewW, viewH, scroll.x, scroll.y, clearSel, undo]);
 
   const toStage = (e: any) => {
     const st = stageRef.current;
