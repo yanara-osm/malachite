@@ -138,8 +138,8 @@ export default function Home() {
         {/* 上半：logo + 标题，垂直居中占满 */}
         <div className="flex flex-1 flex-col items-center justify-center">
           {/* 孔雀翎 logo */}
-          <div className="fade-up mb-6" style={{ animationDelay: "0.05s" }}>
-            <img src="/logo.png" alt="孔雀翎" className="h-64 w-64 object-contain" />
+          <div className="fade-up mb-8" style={{ animationDelay: "0.05s" }}>
+            <img src="/logo.png" alt="孔雀翎" className="h-80 w-80 object-contain" />
           </div>
 
           <h1 className="fade-up mb-2 text-center text-2xl font-medium tracking-[0.18em] text-foreground/90"
