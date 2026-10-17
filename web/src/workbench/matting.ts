@@ -9,7 +9,10 @@ let sess: ort.InferenceSession | null = null;
 async function getSession(): Promise<ort.InferenceSession> {
   if (sess) return sess;
   ort.env.wasm.wasmPaths = "/";
-  ort.env.wasm.numThreads = 4;
+  // 多线程 WASM 需要 SharedArrayBuffer（COOP/COEP）。
+  // 真实浏览器 tab 里可用→4线程快；iframe/无隔离环境→自动降单线程（慢但能跑）
+  const canMulti = typeof SharedArrayBuffer !== "undefined";
+  ort.env.wasm.numThreads = canMulti ? 4 : 1;
   sess = await ort.InferenceSession.create("/models/u2netp.onnx", {
     executionProviders: ["wasm"],
     graphOptimizationLevel: "all",

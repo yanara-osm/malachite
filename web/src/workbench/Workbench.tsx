@@ -263,7 +263,6 @@ export default function Workbench({ id, title, cover }: { id: string; title: str
       const msg = e?.message || String(e);
       console.error("[抠像失败]", e);
       setMattingError("抠像失败: " + msg);
-      alert("抠像失败: " + msg);
     } finally {
       setAiBusy(false);
     }
