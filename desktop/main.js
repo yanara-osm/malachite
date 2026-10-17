@@ -123,6 +123,15 @@ app.whenReady().then(async () => {
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
   const port = server.address().port;
 
+  // 启动 splash（窗口 ready 前的等待期给出视觉反馈）
+  const splash = new BrowserWindow({
+    width: 420, height: 280,
+    frame: false, resizable: false, center: true,
+    alwaysOnTop: true, skipTaskbar: true,
+    backgroundColor: "#0a0a0a",
+  });
+  splash.loadFile(path.join(__dirname, "splash.html"));
+
   const win = new BrowserWindow({
     width: 1500,
     height: 950,
@@ -131,6 +140,7 @@ app.whenReady().then(async () => {
     autoHideMenuBar: true,
     backgroundColor: "#0a0a0a",
     title: "孔雀翎 · Malachite",
+    show: false, // ready-to-show 后再显示，避免黑屏
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,
@@ -139,6 +149,11 @@ app.whenReady().then(async () => {
   });
 
   win.loadURL(`http://127.0.0.1:${port}/`);
+
+  win.once("ready-to-show", () => {
+    splash.close();
+    win.show();
+  });
 
   // 外链用系统浏览器打开（当前无外链，预留）
   win.webContents.setWindowOpenHandler(({ url }) => {

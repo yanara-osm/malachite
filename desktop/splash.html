@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="color-scheme" content="dark">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 100%; height: 100%; background: #0a0a0a; overflow: hidden; }
+  body {
+    display: flex; align-items: center; justify-content: center;
+    font-family: -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif;
+    -webkit-user-select: none; user-select: none;
+  }
+  .card { display: flex; flex-direction: column; align-items: center; gap: 20px; }
+  .logo { font-size: 56px; line-height: 1; filter: drop-shadow(0 0 24px rgba(94,234,212,0.28)); }
+  .name { color: #e5e7eb; font-size: 20px; font-weight: 500; letter-spacing: 4px; }
+  .sub { color: #6b7280; font-size: 11px; letter-spacing: 3px; }
+  .spinner {
+    width: 22px; height: 22px; border: 2px solid rgba(255,255,255,0.12);
+    border-top-color: #5eead4; border-radius: 50%;
+    animation: spin 0.9s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+  <div class="card">
+    <div class="logo">🦚</div>
+    <div class="name">孔雀翎 · Malachite</div>
+    <div class="sub">OPEN SOURCE FILM</div>
+    <div class="spinner"></div>
+  </div>
+</body>
+</html>
