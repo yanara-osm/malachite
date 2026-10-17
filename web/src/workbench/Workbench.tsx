@@ -9,7 +9,7 @@ import Ruler from "./Ruler";
 import { DOC_W, DOC_H } from "./types";
 import type { Layer, Tool, StepEntry } from "./types";
 import { magicWand, lasso, rectSelection, ellipseSelection, fillSelection, extractSelection, selectionToCanvas, type Selection } from "./selection";
-import { samSegment } from "./sam";
+import { samEmbed, samPredict, samComposite, samClearCache, type SamPoint } from "./sam";
 
 const KonvaStage = dynamic(() => import("react-konva").then(m => m.Stage), { ssr: false });
 
@@ -123,6 +123,10 @@ export default function Workbench({ id, title, cover }: { id: string; title: str
   const [wandClicks, setWandClicks] = useState(0);
   const [lassoLive, setLassoLive] = useState<{ x: number; y: number }[]>([]);
   const [dragSel, setDragSel] = useState<{ x0: number; y0: number; x1: number; y1: number } | null>(null);
+  // SAM 交互态：累积的点、实时 mask 预览
+  const [samPoints, setSamPoints] = useState<SamPoint[]>([]);
+  const [samMask, setSamMask] = useState<HTMLCanvasElement | null>(null);
+  const samBaseRef = useRef<HTMLCanvasElement | null>(null);
   const lassoPts = useRef<{ x: number; y: number }[]>([]);
   const undoStack = useRef<Layer[][]>([]);
   const [undoCount, setUndoCount] = useState(0);
@@ -351,21 +355,16 @@ export default function Workbench({ id, title, cover }: { id: string; title: str
     }
   };
 
-  // SAM 分割：点选物体 → 该物体 mask → 透明背景主体新图层（置于最上层）
-  const doSamSegment = async (docX: number, docY: number) => {
-    const st = stageRef.current;
-    if (!st || aiBusy) return;
-    setAiBusy(true);
-    try {
-      setMattingError(null);
-      // 1. 取底图（第一个 image 图层）合成到白底 canvas
-      const base = layers.find(l => l.visible && l.shapes.some(s => s.kind === "image"));
-      if (!base) { setMattingError("没有底图"); return; }
-      const c = document.createElement("canvas");
-      c.width = docSize.w; c.height = docSize.h;
-      const ctx = c.getContext("2d")!;
-      ctx.fillStyle = "#fff";
-      ctx.fillRect(0, 0, c.width, c.height);
+  // 取底图 canvas（白底合成，缓存）；key 用于判断底图是否变化
+  const getSamBase = async (): Promise<HTMLCanvasElement> => {
+    if (samBaseRef.current) return samBaseRef.current;
+    const base = layers.find(l => l.visible && l.shapes.some(s => s.kind === "image"));
+    const c = document.createElement("canvas");
+    c.width = docSize.w; c.height = docSize.h;
+    const ctx = c.getContext("2d")!;
+    ctx.fillStyle = "#fff";
+    ctx.fillRect(0, 0, c.width, c.height);
+    if (base) {
       for (const s of base.shapes.filter(s => s.kind === "image")) {
         const img = await new Promise<HTMLImageElement>((res, rej) => {
           const i = new Image();
@@ -375,19 +374,57 @@ export default function Workbench({ id, title, cover }: { id: string; title: str
         });
         ctx.drawImage(img, s.x, s.y, s.w, s.h);
       }
-      // 2. SAM 分割（点选物体）
+    }
+    samBaseRef.current = c;
+    return c;
+  };
+
+  // SAM 交互：加一个点（前景/背景），实时刷新 mask 预览
+  const samAddPoint = async (docX: number, docY: number, label: 1 | 0) => {
+    if (aiBusy) return;
+    setAiBusy(true);
+    try {
+      setMattingError(null);
+      const base = await getSamBase();
       const key = layers.map(l => l.id).join(",");
-      const out = await samSegment(c, docX, docY, key);
-      const dataUrl = out.toDataURL("image/png");
-      pushUndo();
-      const nl: Layer = { id: "sam_" + Date.now(), name: "SAM 分割", visible: true, opacity: 1, shapes: [{ kind: "image", x: 0, y: 0, w: out.width, h: out.height, src: dataUrl, opacity: 1 }] };
-      setLayers(ls => [...ls, nl]);
-      setActiveLayer(nl.id);
+      await samEmbed(base, key); // 首次跑 encoder，之后缓存
+      const pts = [...samPoints, { x: docX, y: docY, label }];
+      setSamPoints(pts);
+      const mask = await samPredict(base, pts);
+      setSamMask(mask);
     } catch (e: any) {
       setMattingError("SAM 分割失败：" + (e?.message || e));
     } finally {
       setAiBusy(false);
     }
+  };
+
+  // SAM 确认：当前 mask 抠成透明背景新图层（置于最上层）
+  const samConfirm = async () => {
+    if (samPoints.length === 0 || aiBusy) return;
+    setAiBusy(true);
+    try {
+      setMattingError(null);
+      const base = await getSamBase();
+      const out = await samComposite(base, samPoints);
+      const dataUrl = out.toDataURL("image/png");
+      pushUndo();
+      const nl: Layer = { id: "sam_" + Date.now(), name: "SAM 分割", visible: true, opacity: 1, shapes: [{ kind: "image", x: 0, y: 0, w: out.width, h: out.height, src: dataUrl, opacity: 1 }] };
+      setLayers(ls => [...ls, nl]);
+      setActiveLayer(nl.id);
+      samReset();
+      setTool("move");
+    } catch (e: any) {
+      setMattingError("SAM 分割失败：" + (e?.message || e));
+    } finally {
+      setAiBusy(false);
+    }
+  };
+
+  // SAM 重置：清空点与预览
+  const samReset = () => {
+    setSamPoints([]);
+    setSamMask(null);
   };
 
   // 快速填充（纯前端）：选区边缘取色 → 多轮向内扩散 → 填充
@@ -540,7 +577,12 @@ export default function Workbench({ id, title, cover }: { id: string; title: str
     }
     const p = toStage(e);
     if (tool === "wand") { onWand(p.x, p.y); return; }
-    if (tool === "sam") { doSamSegment(p.x, p.y); return; }
+    if (tool === "sam") {
+      // 官方范式：左键=前景点，右键=背景点（排除）
+      const isRight = e.evt && e.evt.button === 2;
+      samAddPoint(p.x, p.y, isRight ? 0 : 1);
+      return;
+    }
     if (tool === "lasso") { lassoPts.current = [{ x: p.x, y: p.y }]; drawing.current = true; return; }
     if (tool === "rect" || tool === "ellipse") { setDragSel({ x0: p.x, y0: p.y, x1: p.x, y1: p.y }); drawing.current = true; return; }
     drawing.current = true;
@@ -807,6 +849,21 @@ export default function Workbench({ id, title, cover }: { id: string; title: str
             <button onClick={duplicateSelection} title="选区抠出：选区内像素保留、选区外透明，作为新图层" className="h-6 rounded-md border border-foreground/30 bg-foreground/5 px-2 text-foreground/80 transition hover:bg-foreground/15 hover:text-foreground">抠出新图层</button>
             <button onClick={clearSel} className="h-6 rounded-md border border-border px-2 text-foreground/50 transition hover:text-foreground">取消选区 (Esc)</button>
           </>
+        ) : tool === "sam" ? (
+          <>
+            <span className="text-foreground/50">SAM 分割</span>
+            <span className="h-4 w-px bg-border" />
+            <span className="text-[11px] text-foreground/40">
+              {samPoints.length === 0
+                ? "左键点击物体 · 右键排除区域"
+                : `已选 ${samPoints.length} 点${aiBusy ? " · 计算中…" : ""}`}
+            </span>
+            <span className="h-4 w-px bg-border" />
+            <button onClick={samConfirm} disabled={samPoints.length === 0 || aiBusy}
+              className={`h-6 rounded-md border px-2 transition ${samPoints.length === 0 || aiBusy ? "border-border text-foreground/30" : "border-foreground/30 bg-foreground/5 text-foreground/80 hover:bg-foreground/15 hover:text-foreground"}`}>确认导出</button>
+            <button onClick={samReset} disabled={samPoints.length === 0}
+              className={`h-6 rounded-md border border-border px-2 transition ${samPoints.length === 0 ? "text-foreground/30" : "text-foreground/50 hover:text-foreground"}`}>重置</button>
+          </>
         ) : (tool === "brush" || tool === "eraser") ? (
           <>
             <span className="text-foreground/50">{tool === "brush" ? "画笔" : "橡皮"}</span>
@@ -839,7 +896,7 @@ export default function Workbench({ id, title, cover }: { id: string; title: str
         {/* 左：工具栏 */}
         <aside className="flex w-12 shrink-0 flex-col items-center gap-1 border-r border-border py-2">
           {TOOLS.map(t => (
-            <button key={t.id} title={t.label} onClick={() => setTool(t.id)}
+            <button key={t.id} title={t.label} onClick={() => { if (t.id !== "sam") samReset(); setTool(t.id); }}
               className={`flex h-9 w-9 items-center justify-center rounded-lg text-sm transition ${tool === t.id ? "bg-foreground/15 text-foreground" : "text-foreground/50 hover:bg-foreground/5 hover:text-foreground/80"}`}>
               {t.icon}
             </button>
@@ -868,7 +925,7 @@ export default function Workbench({ id, title, cover }: { id: string; title: str
               <Ruler zoom={zoom} origin={originY} length={viewH} dir="v" />
             </div>
             <div ref={vpRef} className="relative min-w-0 flex-1 overflow-hidden"
-              style={{ background: "oklch(0.14 0.005 260)", cursor: spaceDown || tool === "move" ? "grab" : tool === "wand" || tool === "lasso" ? "crosshair" : tool === "brush" || tool === "eraser" ? "cell" : "default" }}
+              style={{ background: "oklch(0.14 0.005 260)", cursor: spaceDown || tool === "move" ? "grab" : tool === "wand" || tool === "lasso" || tool === "sam" ? "crosshair" : tool === "brush" || tool === "eraser" ? "cell" : "default" }}
               onDragEnter={(e) => { e.preventDefault(); setDragOver(true); }}
               onDragOver={(e) => e.preventDefault()}
               onDragLeave={(e) => { e.preventDefault(); setDragOver(false); }}
@@ -888,6 +945,7 @@ export default function Workbench({ id, title, cover }: { id: string; title: str
                   onMouseMove={onStageMouseMove}
                   onMouseUp={endStroke}
                   onMouseLeave={endStroke}
+                  onContextMenu={(e: any) => { e.evt.preventDefault(); }}
                   style={{ position: "absolute", inset: 0 }}
                 >
                   {/* 全幅透明捕获层：保证空白处点击也派发事件（魔棒/套索/填充落点） */}
@@ -909,6 +967,13 @@ export default function Workbench({ id, title, cover }: { id: string; title: str
                   {/* 选区遮罩 + 套索预览（顶层，不导出） */}
                   <KLayer ref={overlayRef}>
                     {selCanvas && <KImage image={selCanvas} x={0} y={0} width={docSize.w} height={docSize.h} opacity={0.85} listening={false} />}
+                    {/* SAM mask 预览 + 点标记（青色=前景点，红=背景点） */}
+                    {tool === "sam" && samMask && <KImage image={samMask} x={0} y={0} width={docSize.w} height={docSize.h} opacity={0.9} listening={false} />}
+                    {tool === "sam" && samPoints.map((p, i) => (
+                      <KCircle key={i} x={p.x} y={p.y} radius={4 / zoom}
+                        fill={p.label === 1 ? "oklch(0.82 0.16 180)" : "#f43f5e"}
+                        stroke="#000" strokeWidth={1 / zoom} listening={false} />
+                    ))}
                     {lassoLive.length > 1 && <KLine points={lassoLive.flatMap(p => [p.x, p.y])} stroke="oklch(0.85 0.12 190)" strokeWidth={2 / zoom} dash={[6 / zoom, 4 / zoom]} closed listening={false} />}
                     {lassoLive.length > 0 && <KCircle x={lassoLive[0].x} y={lassoLive[0].y} radius={4 / zoom} fill="oklch(0.85 0.12 190)" listening={false} />}
                     {dragSel && tool === "rect" && (
