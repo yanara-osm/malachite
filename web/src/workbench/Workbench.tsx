@@ -82,17 +82,17 @@ export default function Workbench({ id, title, cover }: { id: string; title: str
   const [docSize, setDocSize] = useState({ w: DOC_W, h: DOC_H });
 
   // 拖拽新建项目（d 前缀）：文档尺寸 + 底图跟随图片真实长宽比（demo 项目保持 DOC_W/DOC_H）
+  // 按图层 id "L1" 直接定位底图（不靠 src 字符串比对，dataURL 大且分两次传入时比对会失败）
   useEffect(() => {
     if (!id.startsWith("d")) return;
     const i = new window.Image();
     i.onload = () => {
       if (!i.width || !i.height) return;
       setDocSize({ w: i.width, h: i.height });
-      setLayers(ls => ls.map(l =>
-        l.shapes.some(s => s.kind === "image" && s.src === cover)
-          ? { ...l, shapes: l.shapes.map(s => (s.kind === "image" && s.src === cover ? { ...s, w: i.width, h: i.height } : s)) }
-          : l
-      ));
+      setLayers(ls => ls.map(l => {
+        if (l.id !== "L1") return l; // 只动底图
+        return { ...l, shapes: l.shapes.map(s => (s.kind === "image" ? { ...s, w: i.width, h: i.height } : s)) };
+      }));
     };
     i.src = cover;
   }, [id, cover]);
