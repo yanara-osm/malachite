@@ -503,7 +503,7 @@ export default function Workbench({ id, title, cover }: { id: string; title: str
     if (pan.current) {
       const dx = e.evt.clientX - pan.current.sx;
       const dy = e.evt.clientY - pan.current.sy;
-      setScroll({ x: pan.current.ox + dx / zoom, y: pan.current.oy + dy / zoom });
+      setScroll({ x: pan.current.ox - dx / zoom, y: pan.current.oy - dy / zoom });
       return;
     }
     const p = toStage(e);
