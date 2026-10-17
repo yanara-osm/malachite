@@ -117,6 +117,9 @@ export default function Workbench({ id, title, cover }: { id: string; title: str
   const lassoPts = useRef<{ x: number; y: number }[]>([]);
   const undoStack = useRef<Layer[][]>([]);
   const [undoCount, setUndoCount] = useState(0);
+  // 平移（PS 式）：空格+拖拽 或 中键拖拽
+  const [spaceDown, setSpaceDown] = useState(false);
+  const pan = useRef<{ sx: number; sy: number; ox: number; oy: number } | null>(null);
 
   const viewW = viewSize.w, viewH = viewSize.h;
   const originX = scroll.x - viewW / 2;
@@ -144,6 +147,7 @@ export default function Workbench({ id, title, cover }: { id: string; title: str
     const el = vpRef.current;
     if (!el) return;
     const onWheel = (e: WheelEvent) => {
+      if (e.button === 1) return; // 中键滚轮：交给平移，不缩放
       e.preventDefault();
       // 以光标为锚点缩放：光标下的文档像素保持不动（否则放大时图会甩出视口）
       const rect = el.getBoundingClientRect();
@@ -159,12 +163,15 @@ export default function Workbench({ id, title, cover }: { id: string; title: str
       });
     };
     const onKey = (e: KeyboardEvent) => {
+      if (e.code === "Space") { e.preventDefault(); setSpaceDown(true); return; }
       if (e.key === "Escape") { clearSel(); lassoPts.current = []; setLassoLive([]); setTextDraft(null); }
       if ((e.ctrlKey || e.metaKey) && e.key === "z") { e.preventDefault(); undo(); }
     };
+    const onKeyUp = (e: KeyboardEvent) => { if (e.code === "Space") setSpaceDown(false); };
     el.addEventListener("wheel", onWheel, { passive: false });
     window.addEventListener("keydown", onKey);
-    return () => { el.removeEventListener("wheel", onWheel); window.removeEventListener("keydown", onKey); };
+    window.addEventListener("keyup", onKeyUp);
+    return () => { el.removeEventListener("wheel", onWheel); window.removeEventListener("keydown", onKey); window.removeEventListener("keyup", onKeyUp); };
   }, [viewW, viewH, scroll.x, scroll.y]);
 
   const toStage = (e: any) => {
@@ -455,6 +462,13 @@ export default function Workbench({ id, title, cover }: { id: string; title: str
   };
 
   const onStageMouseDown = (e: any) => {
+    // 平移优先：空格+左键 或 中键（PS 式）
+    const isMiddle = e.evt && e.evt.button === 1;
+    if (spaceDown || isMiddle) {
+      e.evt?.preventDefault?.();
+      pan.current = { sx: e.evt.clientX, sy: e.evt.clientY, ox: scroll.x, oy: scroll.y };
+      return;
+    }
     if (tool === "move") return;
     const p = toStage(e);
     if (tool === "wand") { onWand(p.x, p.y); return; }
@@ -475,6 +489,13 @@ export default function Workbench({ id, title, cover }: { id: string; title: str
   };
 
   const onStageMouseMove = (e: any) => {
+    // 平移中：按拖拽位移更新 scroll（屏幕像素 / zoom = 文档像素）
+    if (pan.current) {
+      const dx = e.evt.clientX - pan.current.sx;
+      const dy = e.evt.clientY - pan.current.sy;
+      setScroll({ x: pan.current.ox + dx / zoom, y: pan.current.oy + dy / zoom });
+      return;
+    }
     const p = toStage(e);
     setCursor({ x: p.x, y: p.y });
     if (!drawing.current) return;
@@ -487,6 +508,7 @@ export default function Workbench({ id, title, cover }: { id: string; title: str
   };
 
   const endStroke = () => {
+    if (pan.current) { pan.current = null; return; }
     if (!drawing.current) return;
     drawing.current = false;
     if (tool === "lasso") {
@@ -752,7 +774,7 @@ export default function Workbench({ id, title, cover }: { id: string; title: str
               <Ruler zoom={zoom} origin={originY} length={viewH} dir="v" />
             </div>
             <div ref={vpRef} className="relative min-w-0 flex-1 overflow-hidden"
-              style={{ background: "oklch(0.14 0.005 260)", cursor: tool === "wand" || tool === "lasso" ? "crosshair" : tool === "brush" || tool === "eraser" ? "cell" : "default" }}
+              style={{ background: "oklch(0.14 0.005 260)", cursor: spaceDown ? "grab" : tool === "wand" || tool === "lasso" ? "crosshair" : tool === "brush" || tool === "eraser" ? "cell" : "default" }}
               onDragEnter={(e) => { e.preventDefault(); setDragOver(true); }}
               onDragOver={(e) => e.preventDefault()}
               onDragLeave={(e) => { e.preventDefault(); setDragOver(false); }}
