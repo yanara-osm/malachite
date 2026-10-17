@@ -6,11 +6,22 @@ import Konva from "konva";
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import Ruler from "./Ruler";
-import { DOC_W, DOC_H } from "./types";
-import type { Layer, Tool, StepEntry } from "./types";
+import { DOC_W, DOC_H, DEFAULT_ADJUST, ADJUST_FIELDS, BLEND_TO_COMPOSITE, BLEND_MODES } from "./types";
+import type { Layer, Tool, StepEntry, BlendMode, ColorAdjust } from "./types";
+import { applyColorGrade, isDefaultAdjust } from "./colorGrade";
+import ColorWheelPicker from "./ColorWheelPicker";
 import { magicWand, lasso, rectSelection, ellipseSelection, fillSelection, extractSelection, selectionToCanvas, type Selection } from "./selection";
 import { samEmbed, samPredict, samComposite, samSegmentAll, samExtractRegion, samClearCache, type SamPoint, type SamRegion } from "./sam";
 import { loadProjectState, saveProjectState } from "@/lib/autosave";
+
+// 注册自定义调色滤镜（Konva.Filters.ColorGrade），模块只加载一次
+if (!(Konva as any).Filters.ColorGrade) {
+  (Konva as any).Filters.ColorGrade = function (this: any, imageData: ImageData) {
+    // 自定义 attr 没有自动 getter（如 this.colorAdjust()），必须用 attr()/getAttr() 读
+    const adj = this.getAttr?.("colorAdjust") ?? this.attr?.("colorAdjust");
+    if (adj) applyColorGrade(imageData, adj);
+  };
+}
 
 const KonvaStage = dynamic(() => import("react-konva").then(m => m.Stage), { ssr: false });
 
@@ -163,6 +174,8 @@ export default function Workbench({ id, title, cover }: { id: string; title: str
   // undo/redo 需读「当前」layers 压栈；keydown 闭包可能拿到旧 layers，用 ref 存最新值
   const layersRef = useRef(layers);
   layersRef.current = layers;
+  // 每个图层的 Konva.Layer 节点引用（调色滤镜 cache 用）
+  const layerRefs = useRef<Record<string, Konva.Layer>>({});
   // 平移（PS 式）：空格+拖拽 或 中键拖拽
   const [spaceDown, setSpaceDown] = useState(false);
   const pan = useRef<{ sx: number; sy: number; ox: number; oy: number } | null>(null);
@@ -807,6 +820,32 @@ export default function Workbench({ id, title, cover }: { id: string; title: str
     setActiveLayer(lid);
   };
 
+  // 图层样式 + 调色（不压撤销栈：频繁拖滑块会让撤销栈爆炸）
+  const setLayerOpacity = (lid: string, opacity: number) => setLayers(ls => ls.map(l => l.id === lid ? { ...l, opacity } : l));
+  const setLayerBlendMode = (lid: string, blendMode: BlendMode) => setLayers(ls => ls.map(l => l.id === lid ? { ...l, blendMode } : l));
+  const setLayerAdjust = (lid: string, key: keyof ColorAdjust, value: number) =>
+    setLayers(ls => ls.map(l => l.id === lid ? { ...l, adjust: { ...(l.adjust ?? DEFAULT_ADJUST), [key]: value } } : l));
+  const resetLayerAdjust = (lid: string) => setLayers(ls => ls.map(l => l.id === lid ? { ...l, adjust: DEFAULT_ADJUST } : l));
+
+  // 当前选中图层的对象 + 调色参数（供样式区 UI 用）
+  const activeLayerObj = layers.find(l => l.id === activeLayer) ?? null;
+  const activeAdjust = activeLayerObj?.adjust ?? DEFAULT_ADJUST;
+
+  // 调色滤镜：layers 变化时对每个图层手动设置滤镜 + 重新 cache（ref 回调时序不可靠）
+  useEffect(() => {
+    layers.forEach(l => {
+      const node = layerRefs.current[l.id];
+      if (!node) return;
+      node.clearCache();
+      if (!isDefaultAdjust(l.adjust)) {
+        node.filters([(Konva.Filters as any).ColorGrade] as any);
+        node.setAttr("colorAdjust", l.adjust ?? DEFAULT_ADJUST);
+        node.cache();
+      }
+    });
+    stageRef.current?.batchDraw();
+  }, [layers]);
+
   const exportImage = async (fmt: "png" | "jpg" | "webp" | "psd") => {
     try {
       const st = stageRef.current;
@@ -974,7 +1013,7 @@ export default function Workbench({ id, title, cover }: { id: string; title: str
             )}
             <label className="flex items-center gap-1 text-foreground/60">
               <span>桶色</span>
-              <input type="color" value={fillColor} onChange={e => setFillColor(e.target.value)} className="h-5 w-6 cursor-pointer rounded border border-border bg-transparent" />
+              <ColorWheelPicker value={fillColor} onChange={setFillColor} />
             </label>
             <button onClick={() => applySelection(fillColor)} title="油漆桶：把选区填成桶色" className="h-6 rounded-md border border-border px-2 text-foreground/70 transition hover:bg-secondary hover:text-foreground">油漆桶</button>
             <button onClick={() => applySelection(null)} className="h-6 rounded-md border border-border px-2 text-foreground/70 transition hover:bg-secondary hover:text-foreground">清除选区</button>
@@ -1024,7 +1063,7 @@ export default function Workbench({ id, title, cover }: { id: string; title: str
             {tool === "brush" && (
               <label className="flex items-center gap-1 text-foreground/60">
                 <span>颜色</span>
-                <input type="color" value={brushColor} onChange={e => setBrushColor(e.target.value)} className="h-5 w-6 cursor-pointer rounded border border-border bg-transparent" />
+                <ColorWheelPicker value={brushColor} onChange={setBrushColor} />
               </label>
             )}
             <label className="flex items-center gap-1.5 text-foreground/60">
@@ -1106,7 +1145,9 @@ export default function Workbench({ id, title, cover }: { id: string; title: str
                     <KRect x={0} y={0} width={docSize.w} height={docSize.h} fill="#fff" opacity={0} listening={true} />
                   </KLayer>
                   {layers.map(l => l.visible && (
-                    <KLayer key={l.id} opacity={l.opacity} name={l.id}>
+                    <KLayer key={l.id} opacity={l.opacity} name={l.id}
+                      globalCompositeOperation={l.blendMode ? BLEND_TO_COMPOSITE[l.blendMode] : "source-over"}
+                      ref={(ref) => { if (ref) layerRefs.current[l.id] = ref; else delete layerRefs.current[l.id]; }}>
                       {l.shapes.map((s, i) => {
                         if (s.kind === "rect") return <KRect key={i} x={s.x} y={s.y} width={s.w} height={s.h} fill={s.fill} opacity={s.opacity} cornerRadius={s.cornerRadius} />;
                         if (s.kind === "text") return <KText key={i} x={s.x} y={s.y} text={s.text} fontSize={s.fontSize} fill={s.fill} stroke={s.stroke} strokeWidth={s.strokeWidth} opacity={s.opacity} fontFamily="serif" />;
@@ -1177,7 +1218,7 @@ export default function Workbench({ id, title, cover }: { id: string; title: str
                   <div className="flex items-center gap-2">
                     <label className="flex items-center gap-1 text-[11px] text-foreground/60">
                       色
-                      <input type="color" value={textColor} onChange={e => setTextColor(e.target.value)} className="h-5 w-6 cursor-pointer rounded border border-border bg-transparent" />
+                      <ColorWheelPicker value={textColor} onChange={setTextColor} />
                     </label>
                     <label className="flex flex-1 items-center gap-1 text-[11px] text-foreground/60">
                       字号
@@ -1237,6 +1278,54 @@ export default function Workbench({ id, title, cover }: { id: string; title: str
                 </div>
               ))}
             </div>
+
+            {/* 样式区：选中图层后显示（模仿 PS 图层样式 + Camera Raw 调色） */}
+            {activeLayerObj && (
+              <div className="mt-4 border-t border-border pt-3">
+                <p className="mb-3 text-[10px] tracking-widest text-foreground/40">样式</p>
+
+                {/* 不透明度 */}
+                <div className="mb-3">
+                  <div className="mb-1 flex items-center justify-between">
+                    <span className="text-[10px] text-foreground/50">不透明度</span>
+                    <span className="text-[10px] tabular-nums text-foreground/70">{Math.round(activeLayerObj.opacity * 100)}%</span>
+                  </div>
+                  <input type="range" min={0} max={100} step={1}
+                    value={Math.round(activeLayerObj.opacity * 100)}
+                    onChange={e => setLayerOpacity(activeLayerObj.id, Number(e.target.value) / 100)}
+                    className="w-full cursor-pointer accent-cyan-500" />
+                </div>
+
+                {/* 混合模式 */}
+                <div className="mb-3">
+                  <span className="mb-1 block text-[10px] text-foreground/50">混合模式</span>
+                  <select value={activeLayerObj.blendMode ?? "normal"}
+                    onChange={e => setLayerBlendMode(activeLayerObj.id, e.target.value as BlendMode)}
+                    className="w-full rounded-md border border-border bg-card px-2 py-1 text-[11px] text-foreground/80 outline-none focus:border-foreground/30">
+                    {BLEND_MODES.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
+                  </select>
+                </div>
+
+                {/* 调色（Camera Raw 基础面板） */}
+                <div className="mb-2 flex items-center justify-between">
+                  <p className="text-[10px] tracking-widest text-foreground/40">调色</p>
+                  <button onClick={() => resetLayerAdjust(activeLayerObj.id)}
+                    className="text-[10px] text-foreground/40 transition hover:text-foreground">重置</button>
+                </div>
+                {ADJUST_FIELDS.map(f => (
+                  <div key={f.key} className="mb-2">
+                    <div className="mb-0.5 flex items-center justify-between">
+                      <span className="text-[10px] text-foreground/50">{f.label}</span>
+                      <span className="text-[10px] tabular-nums text-foreground/70">{Math.round(activeAdjust[f.key])}</span>
+                    </div>
+                    <input type="range" min={f.min} max={f.max} step={1}
+                      value={Math.round(activeAdjust[f.key])}
+                      onChange={e => setLayerAdjust(activeLayerObj.id, f.key, Number(e.target.value))}
+                      className="w-full cursor-pointer accent-cyan-500" />
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
           <div className="border-t border-border p-3">
             <p className="mb-2 text-[10px] tracking-widest text-foreground/40">智能体</p>
