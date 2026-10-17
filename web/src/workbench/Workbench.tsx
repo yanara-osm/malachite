@@ -326,6 +326,42 @@ export default function Workbench({ id, title, cover }: { id: string; title: str
     }
   };
 
+  // 拖图片进画布：按 drop 点定位，等比缩放适配文档，作为新图层
+  const [dragOver, setDragOver] = useState(false);
+  const onCanvasDrop = async (e: React.DragEvent) => {
+    e.preventDefault();
+    setDragOver(false);
+    const f = Array.from(e.dataTransfer.files).find(f => f.type.startsWith("image/"));
+    if (!f) return;
+    const st = stageRef.current;
+    if (!st) return;
+    // drop 点 → 文档坐标
+    const pos = st.getRelativePosition({ x: e.clientX, y: e.clientY });
+    // 读图尺寸
+    const dataUrl = await new Promise<string>(r => {
+      const fr = new FileReader();
+      fr.onload = () => r(fr.result as string);
+      fr.readAsDataURL(f);
+    });
+    const img = new Image();
+    await new Promise(r => { img.onload = r; img.src = dataUrl; });
+    // 等比缩放：最大占文档 80%
+    const maxW = docSize.w * 0.8, maxH = docSize.h * 0.8;
+    const scale = Math.min(maxW / img.width, maxH / img.height, 1);
+    const w = Math.round(img.width * scale), h = Math.round(img.height * scale);
+    // 以 drop 点为中心，clamp 进文档
+    let x = Math.round(pos.x - w / 2), y = Math.round(pos.y - h / 2);
+    x = Math.max(0, Math.min(x, docSize.w - w));
+    y = Math.max(0, Math.min(y, docSize.h - h));
+    pushUndo();
+    const lid = "L" + Date.now();
+    setLayers(ls => [
+      ...ls,
+      { id: lid, name: f.name.replace(/\.\w+$/, ""), visible: true, opacity: 1, shapes: [{ kind: "image", x, y, w, h, src: dataUrl, opacity: 1 }] },
+    ]);
+    setActiveLayer(lid);
+  };
+
   // 魔棒：点击处按颜色扩散选区，多次点击 OR 累积
   const onWand = async (px: number, py: number) => {
     const idata = await stageToImageData();
@@ -579,7 +615,17 @@ export default function Workbench({ id, title, cover }: { id: string; title: str
               <Ruler zoom={zoom} origin={originY} length={viewH} dir="v" />
             </div>
             <div ref={vpRef} className="relative min-w-0 flex-1 overflow-hidden"
-              style={{ background: "oklch(0.14 0.005 260)", cursor: tool === "wand" || tool === "lasso" ? "crosshair" : tool === "brush" || tool === "eraser" ? "cell" : "default" }}>
+              style={{ background: "oklch(0.14 0.005 260)", cursor: tool === "wand" || tool === "lasso" ? "crosshair" : tool === "brush" || tool === "eraser" ? "cell" : "default" }}
+              onDragEnter={(e) => { e.preventDefault(); setDragOver(true); }}
+              onDragOver={(e) => e.preventDefault()}
+              onDragLeave={(e) => { e.preventDefault(); setDragOver(false); }}
+              onDrop={onCanvasDrop}>
+              {dragOver && (
+                <div className="pointer-events-none absolute inset-3 z-40 flex items-center justify-center rounded-xl border-2 border-dashed"
+                  style={{ borderColor: "oklch(0.82 0.16 180 / 0.8)", background: "oklch(0.82 0.16 180 / 0.08)" }}>
+                  <p className="text-sm font-medium" style={{ color: "oklch(0.85 0.14 190)" }}>松开 · 图片落到此处成为新图层</p>
+                </div>
+              )}
               <div className="absolute" style={{ left: viewW / 2 - scroll.x * zoom, top: viewH / 2 - scroll.y * zoom, width: docSize.w * zoom, height: docSize.h * zoom, background: CHECKER, boxShadow: "0 0 0 1px oklch(0.3 0.01 260), 0 12px 40px -12px black" }}>
                 <KonvaStage
                   ref={stageRef}
