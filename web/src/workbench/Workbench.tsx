@@ -55,12 +55,20 @@ export default function Workbench({ id, title, cover }: { id: string; title: str
   const [zoom, setZoom] = useState(0.42);
   const [scroll, setScroll] = useState({ x: 0, y: 0 });
   const [tool, setTool] = useState<Tool>("move");
-  const [layers, setLayers] = useState<Layer[]>(() => [
-    { id: "L1", name: "水墨底图", visible: true, opacity: 1, shapes: [{ kind: "image", x: 0, y: 0, w: DOC_W, h: DOC_H, src: cover, opacity: 1 }] },
-    { id: "L2", name: "雾气 · 重绘", visible: true, opacity: 0.4, shapes: [{ kind: "rect", x: 200, y: 560, w: 1000, h: 300, fill: "rgba(245,243,238,0.55)", opacity: 1, cornerRadius: 140 }] },
-    { id: "L3", name: "主峰标注", visible: true, opacity: 1, shapes: [{ kind: "text", x: 640, y: 300, text: "主峰", fontSize: 48, fill: "#1c1a17", stroke: "rgba(255,255,255,0.7)", strokeWidth: 1.5, opacity: 1 }] },
-  ]);
-  const [activeLayer, setActiveLayer] = useState("L3");
+  const [layers, setLayers] = useState<Layer[]>(() => {
+    // 只有水墨 demo 项目带预置图层，其他项目只有底图
+    if (id === "ink") {
+      return [
+        { id: "L1", name: "水墨底图", visible: true, opacity: 1, shapes: [{ kind: "image", x: 0, y: 0, w: DOC_W, h: DOC_H, src: cover, opacity: 1 }] },
+        { id: "L2", name: "雾气 · 重绘", visible: true, opacity: 0.4, shapes: [{ kind: "rect", x: 200, y: 560, w: 1000, h: 300, fill: "rgba(245,243,238,0.55)", opacity: 1, cornerRadius: 140 }] },
+        { id: "L3", name: "主峰标注", visible: true, opacity: 1, shapes: [{ kind: "text", x: 640, y: 300, text: "主峰", fontSize: 48, fill: "#1c1a17", stroke: "rgba(255,255,255,0.7)", strokeWidth: 1.5, opacity: 1 }] },
+      ];
+    }
+    return [
+      { id: "L1", name: "底图", visible: true, opacity: 1, shapes: [{ kind: "image", x: 0, y: 0, w: DOC_W, h: DOC_H, src: cover, opacity: 1 }] },
+    ];
+  });
+  const [activeLayer, setActiveLayer] = useState(id === "ink" ? "L3" : "L1");
   const [brushes, setBrushes] = useState<Record<string, { points: number[]; color: string; width: number }>>({});
   const [cursor, setCursor] = useState<{ x: number; y: number } | null>(null);
   const [strokes, setStrokes] = useState<Record<string, number[][]>>({});
@@ -674,7 +682,8 @@ export default function Workbench({ id, title, cover }: { id: string; title: str
             </div>
           </div>
 
-          {/* 底部 step timeline */}
+          {/* 底部 step timeline（仅水墨 demo 项目展示） */}
+          {id === "ink" && (
           <div className="shrink-0 border-t border-border px-4 py-2">
             <p className="mb-1.5 text-[10px] tracking-widest text-foreground/40">STEP TIMELINE</p>
             <div className="flex items-center gap-2 overflow-x-auto">
@@ -690,6 +699,7 @@ export default function Workbench({ id, title, cover }: { id: string; title: str
               ))}
             </div>
           </div>
+          )}
         </section>
 
         {/* 右：图层 + 智能体 */}
