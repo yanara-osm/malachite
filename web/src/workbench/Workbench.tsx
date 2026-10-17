@@ -165,7 +165,7 @@ export default function Workbench({ id, title, cover }: { id: string; title: str
     el.addEventListener("wheel", onWheel, { passive: false });
     window.addEventListener("keydown", onKey);
     return () => { el.removeEventListener("wheel", onWheel); window.removeEventListener("keydown", onKey); };
-  }, [viewW, viewH, scroll.x, scroll.y, clearSel, undo]);
+  }, [viewW, viewH, scroll.x, scroll.y]);
 
   const toStage = (e: any) => {
     const st = stageRef.current;
