@@ -613,6 +613,30 @@ export default function Workbench({ id, title, cover }: { id: string; title: str
     const n = [...ls]; [n[i], n[j]] = [n[j], n[i]]; return n;
   });
 
+  // 删除图层（保留至少一层；删除活动层后自动选相邻层）
+  const deleteLayer = (lid: string) => {
+    pushUndo();
+    setStrokes(s => { const n = { ...s }; delete n[lid]; return n; });
+    setLayers(ls => {
+      if (ls.length <= 1) return ls; // 至少保留一层
+      const i = ls.findIndex(l => l.id === lid);
+      const next = ls.filter(l => l.id !== lid);
+      if (activeLayer === lid) {
+        const fallback = next[Math.max(0, i - 1)] ?? next[0];
+        setActiveLayer(fallback?.id ?? "");
+      }
+      return next;
+    });
+  };
+
+  // 新建空图层（透明，置于最顶层）
+  const newEmptyLayer = () => {
+    pushUndo();
+    const lid = "L" + Date.now();
+    setLayers(ls => [...ls, { id: lid, name: "空图层", visible: true, opacity: 1, shapes: [] }]);
+    setActiveLayer(lid);
+  };
+
   const exportImage = async (fmt: "png" | "jpg" | "webp" | "psd") => {
     try {
       const st = stageRef.current;
@@ -970,7 +994,11 @@ export default function Workbench({ id, title, cover }: { id: string; title: str
         {/* 右：图层 + 智能体 */}
         <aside className="flex w-60 shrink-0 flex-col border-l border-border">
           <div className="flex-1 overflow-y-auto p-3">
-            <p className="mb-2 text-[10px] tracking-widest text-foreground/40">图层</p>
+            <div className="mb-2 flex items-center justify-between">
+              <p className="text-[10px] tracking-widest text-foreground/40">图层</p>
+              <button onClick={newEmptyLayer} title="新建空图层"
+                className="rounded-md border border-border px-2 py-0.5 text-[11px] text-foreground/60 transition hover:bg-secondary hover:text-foreground">＋ 新建</button>
+            </div>
             <div className="space-y-1">
               {[...layers].reverse().map(l => (
                 <div key={l.id} onClick={() => setActiveLayer(l.id)}
@@ -981,6 +1009,7 @@ export default function Workbench({ id, title, cover }: { id: string; title: str
                   <div className="hidden gap-0.5 group-hover:block">
                     <button title="上移一层" onClick={(e) => { e.stopPropagation(); moveLayer(l.id, 1); }} className="px-1 text-[10px] text-foreground/40 hover:text-foreground">↑</button>
                     <button title="下移一层" onClick={(e) => { e.stopPropagation(); moveLayer(l.id, -1); }} className="px-1 text-[10px] text-foreground/40 hover:text-foreground">↓</button>
+                    <button title="删除图层" onClick={(e) => { e.stopPropagation(); deleteLayer(l.id); }} className="px-1 text-[10px] text-foreground/40 hover:text-red-400">✕</button>
                   </div>
                 </div>
               ))}
