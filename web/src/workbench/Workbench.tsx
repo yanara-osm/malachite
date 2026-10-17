@@ -157,7 +157,12 @@ export default function Workbench({ id, title, cover }: { id: string; title: str
   const samBaseRef = useRef<{ canvas: HTMLCanvasElement; x: number; y: number; layerId: string } | null>(null);
   const lassoPts = useRef<{ x: number; y: number }[]>([]);
   const undoStack = useRef<Layer[][]>([]);
+  const redoStack = useRef<Layer[][]>([]);
   const [undoCount, setUndoCount] = useState(0);
+  const [redoCount, setRedoCount] = useState(0);
+  // undo/redo 需读「当前」layers 压栈；keydown 闭包可能拿到旧 layers，用 ref 存最新值
+  const layersRef = useRef(layers);
+  layersRef.current = layers;
   // 平移（PS 式）：空格+拖拽 或 中键拖拽
   const [spaceDown, setSpaceDown] = useState(false);
   const pan = useRef<{ sx: number; sy: number; ox: number; oy: number } | null>(null);
@@ -207,7 +212,8 @@ export default function Workbench({ id, title, cover }: { id: string; title: str
     const onKey = (e: KeyboardEvent) => {
       if (e.code === "Space") { e.preventDefault(); setSpaceDown(true); return; }
       if (e.key === "Escape") { clearSel(); lassoPts.current = []; setLassoLive([]); setTextDraft(null); }
-      if ((e.ctrlKey || e.metaKey) && e.key === "z") { e.preventDefault(); undo(); }
+      if ((e.ctrlKey || e.metaKey) && (e.key === "z" || e.key === "Z")) { e.preventDefault(); if (e.shiftKey) redo(); else undo(); }
+      else if ((e.ctrlKey || e.metaKey) && (e.key === "y" || e.key === "Y")) { e.preventDefault(); redo(); }
     };
     const onKeyUp = (e: KeyboardEvent) => { if (e.code === "Space") setSpaceDown(false); };
     el.addEventListener("wheel", onWheel, { passive: false });
@@ -320,15 +326,28 @@ export default function Workbench({ id, title, cover }: { id: string; title: str
 
   // 撤销：填充/清除前把 layers 快照压栈
   const pushUndo = useCallback(() => {
-    undoStack.current.push(layers);
+    undoStack.current.push(layersRef.current);
     if (undoStack.current.length > 30) undoStack.current.shift();
+    redoStack.current = []; // 新操作使重做栈失效
     setUndoCount(undoStack.current.length);
-  }, [layers]);
+    setRedoCount(0);
+  }, []);
   const undo = useCallback(() => {
     const prev = undoStack.current.pop();
     if (!prev) return;
+    redoStack.current.push(layersRef.current);
     setLayers(prev);
     setUndoCount(undoStack.current.length);
+    setRedoCount(redoStack.current.length);
+    clearSel();
+  }, []);
+  const redo = useCallback(() => {
+    const next = redoStack.current.pop();
+    if (!next) return;
+    undoStack.current.push(layersRef.current);
+    setLayers(next);
+    setUndoCount(undoStack.current.length);
+    setRedoCount(redoStack.current.length);
     clearSel();
   }, []);
 
@@ -699,7 +718,7 @@ export default function Workbench({ id, title, cover }: { id: string; title: str
     } else if (tool === "fill") {
       // 有选区→对选区填当前色；无选区→铺满活动层
       if (selection) { applySelection(fillColor); }
-      else setLayers(ls => ls.map(l => l.id === activeLayer ? { ...l, shapes: [{ kind: "rect", x: 0, y: 0, w: docSize.w, h: docSize.h, fill: fillColor, opacity: 0.35, cornerRadius: 0 }, ...l.shapes] } : l));
+      else { pushUndo(); setLayers(ls => ls.map(l => l.id === activeLayer ? { ...l, shapes: [{ kind: "rect", x: 0, y: 0, w: docSize.w, h: docSize.h, fill: fillColor, opacity: 0.35, cornerRadius: 0 }, ...l.shapes] } : l)); }
     } else if (tool === "text") {
       // 点击画布 → 打开文字输入浮层（在定位处放置）
       setTextInput("");
@@ -746,6 +765,7 @@ export default function Workbench({ id, title, cover }: { id: string; title: str
       return;
     }
     if (pointRef.current.length >= 4) {
+      pushUndo();
       const pts = pointRef.current;
       setLayers(ls => ls.map(l => l.id === activeLayer
         ? { ...l, shapes: [{ kind: "line", points: pts, stroke: tool === "eraser" ? "rgba(0,0,0,0.9)" : "oklch(0.85 0.12 190)", strokeWidth: tool === "eraser" ? 28 : 8, opacity: 1, tension: 0.5, composite: tool === "eraser" ? "destination-out" : "source-over" }, ...l.shapes] }
@@ -908,6 +928,10 @@ export default function Workbench({ id, title, cover }: { id: string; title: str
           <button onClick={undo} disabled={undoCount === 0}
             className={`h-7 rounded-md border px-2 text-[11px] transition ${undoCount > 0 ? "border-border text-foreground/60 hover:text-foreground" : "cursor-not-allowed border-border/40 text-foreground/25"}`}>
             撤销 ({undoCount})
+          </button>
+          <button onClick={redo} disabled={redoCount === 0}
+            className={`h-7 rounded-md border px-2 text-[11px] transition ${redoCount > 0 ? "border-border text-foreground/60 hover:text-foreground" : "cursor-not-allowed border-border/40 text-foreground/25"}`}>
+            重做 ({redoCount})
           </button>
           <label className="flex h-7 cursor-pointer items-center rounded-md border border-border px-3 text-[11px] text-foreground/60 transition hover:text-foreground">
             导入
