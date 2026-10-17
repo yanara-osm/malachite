@@ -11,12 +11,13 @@
     font-family: -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif;
     -webkit-user-select: none; user-select: none;
   }
-  .card { display: flex; flex-direction: column; align-items: center; gap: 20px; }
-  .logo { font-size: 56px; line-height: 1; filter: drop-shadow(0 0 24px rgba(94,234,212,0.28)); }
-  .name { color: #e5e7eb; font-size: 20px; font-weight: 500; letter-spacing: 4px; }
-  .sub { color: #6b7280; font-size: 11px; letter-spacing: 3px; }
+  .card { display: flex; flex-direction: column; align-items: center; gap: 10px; }
+  .logo { font-size: 56px; line-height: 1; filter: drop-shadow(0 0 24px rgba(94,234,212,0.25)); }
+  .cn { color: #e5e7eb; font-size: 30px; font-weight: 600; letter-spacing: 8px; }
+  .en { color: #5ec8b6; font-size: 14px; letter-spacing: 5px; text-transform: uppercase; }
   .spinner {
-    width: 22px; height: 22px; border: 2px solid rgba(255,255,255,0.12);
+    width: 22px; height: 22px; margin-top: 14px;
+    border: 2px solid rgba(255,255,255,0.12);
     border-top-color: #5eead4; border-radius: 50%;
     animation: spin 0.9s linear infinite;
   }
@@ -26,8 +27,8 @@
 <body>
   <div class="card">
     <div class="logo">🦚</div>
-    <div class="name">孔雀翎 · Malachite</div>
-    <div class="sub">OPEN SOURCE FILM</div>
+    <div class="cn">孔雀翎</div>
+    <div class="en">Malachite</div>
     <div class="spinner"></div>
   </div>
 </body>
