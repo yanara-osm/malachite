@@ -3,7 +3,7 @@ import { Noto_Serif_SC } from "next/font/google";
 import "./globals.css";
 
 const notoSerif = Noto_Serif_SC({
-  subsets: ["latin", "chinese-simplified"],
+  subsets: ["latin"],
   weight: ["400", "500", "600"],
   variable: "--font-serif-sc",
   display: "swap",

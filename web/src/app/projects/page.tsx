@@ -85,7 +85,7 @@ export default function ProjectPool() {
           {dragProjects.map((p) => (
             <Link
               key={p.id}
-              href={`/project/${p.id}`}
+              href={`/project?id=${p.id}`}
               className="group relative aspect-[4/3] overflow-hidden rounded-xl border border-border transition hover:border-foreground/20"
             >
               <Image
@@ -107,7 +107,7 @@ export default function ProjectPool() {
           {PROJECTS.map((p) => (
             <Link
               key={p.id}
-              href={`/project/${p.id}`}
+              href={`/project?id=${p.id}`}
               className="group relative aspect-[4/3] overflow-hidden rounded-xl border border-border transition hover:border-foreground/20"
             >
               <Image

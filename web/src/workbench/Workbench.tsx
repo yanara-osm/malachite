@@ -85,7 +85,7 @@ export default function Workbench({ id, title, cover }: { id: string; title: str
   });
   const [brushes, setBrushes] = useState<Record<string, { points: number[]; color: string; width: number }>>({});
   const [cursor, setCursor] = useState<{ x: number; y: number } | null>(null);
-  const [strokes, setStrokes] = useState<Record<string, number[][]>>({});
+  const [strokes, setStrokes] = useState<Record<string, number[]>>({});
   const stageRef = useRef<any>(null);
   const overlayRef = useRef<any>(null);
   const drawing = useRef(false);

@@ -118,7 +118,7 @@ export default function Home() {
       const dataUrl = await fileToDataUrl(f, 1024);
       const id = "d" + Date.now() + Math.random().toString(36).slice(2, 6);
       saveDragProject({ id, title: f.name.replace(/\.\w+$/, ""), img: dataUrl, time: "刚刚", steps: 1 });
-      router.push(`/project/${id}`);
+      router.push(`/project?id=${id}`);
     } finally {
       setCreating(false);
     }

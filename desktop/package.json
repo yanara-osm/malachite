@@ -1,0 +1,36 @@
+{
+  "name": "malachite-desktop",
+  "version": "0.1.0",
+  "description": "孔雀翎 · Malachite — 开源智能体画布（桌面版）",
+  "main": "main.js",
+  "author": "OSM 开源电影",
+  "license": "MIT",
+  "scripts": {
+    "start": "electron .",
+    "build": "electron-builder --win"
+  },
+  "devDependencies": {
+    "electron": "^44.0.0",
+    "electron-builder": "^26.15.3"
+  },
+  "build": {
+    "appId": "org.osm.malachite",
+    "productName": "孔雀翎 Malachite",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "main.js",
+      "out/**/*"
+    ],
+    "win": {
+      "target": [
+        { "target": "portable", "arch": ["x64"] }
+      ],
+      "icon": "build/icon.ico"
+    },
+    "portable": {
+      "artifactName": "Malachite-${version}-portable.exe"
+    }
+  }
+}
