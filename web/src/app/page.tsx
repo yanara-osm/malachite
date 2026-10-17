@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 
 const SUGGESTIONS = [
@@ -8,6 +8,84 @@ const SUGGESTIONS = [
   "扩展画布到 16:9，补全两侧风景",
   "给角色换一套赛博朋克服装，保持姿态不变",
 ];
+
+// 优雅粒子：logo 附近缓慢上升 + 正弦漂移 + 呼吸闪烁（青/金）
+function FeatherParticles() {
+  const ref = useRef<HTMLCanvasElement>(null);
+  useEffect(() => {
+    const cv = ref.current!;
+    const ctx = cv.getContext("2d")!;
+    let w = 0, h = 0, raf = 0;
+    const DPR = Math.min(2, window.devicePixelRatio || 1);
+    const COLORS = [
+      [150, 220, 235],  // 冷青
+      [190, 230, 240],  // 亮青
+      [230, 210, 150],  // 暖金
+      [200, 190, 220],  // 淡紫
+    ];
+    type P = { x: number; y: number; r: number; vx: number; vy: number; c: number; ph: number; tw: number };
+    let ps: P[] = [];
+    const seed = () => {
+      // 粒子集中在画布中部（logo 区域）：中心 x=50%，y=34%
+      const cx = w / 2, cy = h * 0.34;
+      const R = Math.min(w, h) * 0.28;
+      ps = Array.from({ length: 46 }, () => {
+        const a = Math.random() * Math.PI * 2;
+        const d = Math.pow(Math.random(), 0.6) * R; // 偏中心
+        return {
+          x: cx + Math.cos(a) * d,
+          y: cy + Math.sin(a) * d,
+          r: 0.6 + Math.random() * 1.8,
+          vx: (Math.random() - 0.5) * 0.06,
+          vy: -(0.04 + Math.random() * 0.1),   // 缓慢上升
+          c: (Math.random() * COLORS.length) | 0,
+          ph: Math.random() * Math.PI * 2,
+          tw: 0.5 + Math.random() * 1.2,
+        };
+      });
+    };
+    const resize = () => {
+      w = cv.clientWidth; h = cv.clientHeight;
+      cv.width = w * DPR; cv.height = h * DPR;
+      ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+      seed();
+    };
+    let t = 0;
+    const tick = () => {
+      t += 0.016;
+      ctx.clearRect(0, 0, w, h);
+      for (const p of ps) {
+        p.x += p.vx + Math.sin(t * 0.6 + p.ph) * 0.08;
+        p.y += p.vy;
+        // 出界回绕到下方中心区
+        if (p.y < h * 0.05) { p.y = h * 0.62; p.x = w / 2 + (Math.random() - 0.5) * Math.min(w, h) * 0.5; }
+        if (p.x < -10) p.x = w + 10;
+        if (p.x > w + 10) p.x = -10;
+        const alpha = 0.25 + 0.35 * (0.5 + 0.5 * Math.sin(t * p.tw + p.ph)); // 呼吸
+        const [r, g, b] = COLORS[p.c];
+        // 光晕
+        const grd = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, p.r * 4);
+        grd.addColorStop(0, `rgba(${r},${g},${b},${alpha})`);
+        grd.addColorStop(1, `rgba(${r},${g},${b},0)`);
+        ctx.fillStyle = grd;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.r * 4, 0, Math.PI * 2);
+        ctx.fill();
+        // 芯
+        ctx.fillStyle = `rgba(255,255,255,${alpha * 0.9})`;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.r * 0.7, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      raf = requestAnimationFrame(tick);
+    };
+    resize();
+    window.addEventListener("resize", resize);
+    raf = requestAnimationFrame(tick);
+    return () => { cancelAnimationFrame(raf); window.removeEventListener("resize", resize); };
+  }, []);
+  return <canvas ref={ref} className="pointer-events-none absolute inset-0 z-[5]" style={{ width: "100%", height: "100%" }} />;
+}
 
 export default function Home() {
   const [text, setText] = useState("");
@@ -24,7 +102,7 @@ export default function Home() {
   };
 
   return (
-    <main className="relative flex-1 overflow-hidden">
+    <main className="relative flex flex-1 flex-col overflow-hidden">
       {/* 背景层（净化：单团冷青光，去脏紫光边）*/}
       <div className="pointer-events-none absolute inset-0">
         <div className="aurora-1 absolute -top-1/3 left-1/2 h-[60vh] w-[64vw] -translate-x-1/2 rounded-full opacity-30 blur-3xl"
@@ -44,7 +122,10 @@ export default function Home() {
         </div>
       )}
 
-      <div className="relative z-10 mx-auto flex h-full max-w-3xl flex-col items-center px-6 pb-12">
+      {/* 优雅粒子（logo 附近飘动）*/}
+      <FeatherParticles />
+
+      <div className="relative z-10 mx-auto flex w-full max-w-3xl flex-1 flex-col items-center px-6 pb-12 min-h-0">
         {/* 顶栏：项目入口 */}
         <Link
           href="/projects"
@@ -61,8 +142,9 @@ export default function Home() {
             <img src="/logo.png" alt="孔雀翎" className="h-40 w-40 object-contain" />
           </div>
 
-          <h1 className="fade-up mb-2 text-center text-lg font-medium tracking-wide text-foreground/85" style={{ animationDelay: "0.15s" }}>
-            孔雀翎 <span className="text-foreground/50">Malachite</span>
+          <h1 className="fade-up mb-2 text-center text-2xl font-medium tracking-[0.18em] text-foreground/90"
+            style={{ fontFamily: "var(--font-serif-sc)", animationDelay: "0.15s" }}>
+            孔雀翎 <span className="text-foreground/45 tracking-[0.25em]">Malachite</span>
           </h1>
           <p className="fade-up text-center text-sm text-foreground/60" style={{ animationDelay: "0.25s" }}>
             智能体做你的美术，你负责修改与审查

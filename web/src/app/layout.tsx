@@ -1,5 +1,13 @@
 import type { Metadata } from "next";
+import { Noto_Serif_SC } from "next/font/google";
 import "./globals.css";
+
+const notoSerif = Noto_Serif_SC({
+  subsets: ["latin", "chinese-simplified"],
+  weight: ["400", "500", "600"],
+  variable: "--font-serif-sc",
+  display: "swap",
+});
 
 export const metadata: Metadata = {
   title: "孔雀翎 Malachite — 智能体画布",
@@ -8,8 +16,8 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html lang="zh-CN" className="dark h-full antialiased">
-      <body className="min-h-full flex flex-col bg-background text-foreground font-sans">
+    <html lang="zh-CN" className={`dark h-full antialiased ${notoSerif.variable}`}>
+      <body className="h-full flex flex-col bg-background text-foreground font-sans">
         {children}
       </body>
     </html>
