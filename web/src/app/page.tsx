@@ -44,7 +44,7 @@ export default function Home() {
         </div>
       )}
 
-      <div className="relative z-10 mx-auto flex h-full max-w-3xl flex-col items-center justify-center px-6">
+      <div className="relative z-10 mx-auto flex h-full max-w-3xl flex-col items-center px-6 pb-12">
         {/* 顶栏：项目入口 */}
         <Link
           href="/projects"
@@ -54,19 +54,22 @@ export default function Home() {
           项目 →
         </Link>
 
-        {/* 孔雀翎 logo */}
-        <div className="fade-up mb-5" style={{ animationDelay: "0.05s" }}>
-          <img src="/logo.png" alt="孔雀翎" className="h-40 w-40 object-contain" />
+        {/* 上半：logo + 标题，垂直居中占满 */}
+        <div className="flex flex-1 flex-col items-center justify-center">
+          {/* 孔雀翎 logo */}
+          <div className="fade-up mb-5" style={{ animationDelay: "0.05s" }}>
+            <img src="/logo.png" alt="孔雀翎" className="h-40 w-40 object-contain" />
+          </div>
+
+          <h1 className="fade-up mb-2 text-center text-lg font-medium tracking-wide text-foreground/85" style={{ animationDelay: "0.15s" }}>
+            孔雀翎 <span className="text-foreground/50">Malachite</span>
+          </h1>
+          <p className="fade-up text-center text-sm text-foreground/60" style={{ animationDelay: "0.25s" }}>
+            智能体做你的美术，你负责修改与审查
+          </p>
         </div>
 
-        <h1 className="fade-up mb-2 text-center text-lg font-medium tracking-wide text-foreground/85" style={{ animationDelay: "0.15s" }}>
-          孔雀翎 <span className="text-foreground/50">Malachite</span>
-        </h1>
-        <p className="fade-up mb-8 text-center text-sm text-foreground/60" style={{ animationDelay: "0.25s" }}>
-          智能体做你的美术，你负责修改与审查
-        </p>
-
-        {/* Chat Composer */}
+        {/* Chat Composer（底部）*/}
         <div className={`ring-gradient fade-up w-full rounded-2xl p-2 ${img ? "" : "bg-card/80"} backdrop-blur-xl`}
           style={{ animationDelay: "0.35s" }}
           onDragEnter={(e) => { e.preventDefault(); depth.current += 1; setDrag(true); }}
