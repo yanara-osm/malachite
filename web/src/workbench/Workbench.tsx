@@ -117,6 +117,12 @@ export default function Workbench({ id, title, cover, docSize: initialDocSize }:
     return { w: DOC_W, h: DOC_H };
   });
 
+  // 画布尺寸对话框（PS 式：裁剪 = 画布大小，拉伸 = 图像大小）
+  const [resizeOpen, setResizeOpen] = useState(false);
+  const [rw, setRw] = useState("");
+  const [rh, setRh] = useState("");
+  const [resizeMode, setResizeMode] = useState<"crop" | "stretch">("crop");
+
   // 拖拽新建项目（d 前缀）：文档尺寸 + 底图跟随图片真实长宽比（demo 项目保持 DOC_W/DOC_H）
   useEffect(() => {
     if (!id.startsWith("d")) return;
@@ -176,13 +182,15 @@ export default function Workbench({ id, title, cover, docSize: initialDocSize }:
   const [samAllBusy, setSamAllBusy] = useState<{ done: number; total: number } | null>(null);
   const samBaseRef = useRef<{ canvas: HTMLCanvasElement; x: number; y: number; layerId: string } | null>(null);
   const lassoPts = useRef<{ x: number; y: number }[]>([]);
-  const undoStack = useRef<Layer[][]>([]);
-  const redoStack = useRef<Layer[][]>([]);
+  const undoStack = useRef<{ layers: Layer[]; docSize: { w: number; h: number } }[]>([]);
+  const redoStack = useRef<{ layers: Layer[]; docSize: { w: number; h: number } }[]>([]);
   const [undoCount, setUndoCount] = useState(0);
   const [redoCount, setRedoCount] = useState(0);
   // undo/redo 需读「当前」layers 压栈；keydown 闭包可能拿到旧 layers，用 ref 存最新值
   const layersRef = useRef(layers);
   layersRef.current = layers;
+  const docSizeRef = useRef(docSize);
+  docSizeRef.current = docSize;
   // 每个图层的 Konva.Layer 节点引用（调色滤镜 cache 用）
   const layerRefs = useRef<Record<string, Konva.Layer>>({});
   // 平移（PS 式）：空格+拖拽 或 中键拖拽
@@ -348,7 +356,7 @@ export default function Workbench({ id, title, cover, docSize: initialDocSize }:
 
   // 撤销：填充/清除前把 layers 快照压栈
   const pushUndo = useCallback(() => {
-    undoStack.current.push(layersRef.current);
+    undoStack.current.push({ layers: layersRef.current, docSize: docSizeRef.current });
     if (undoStack.current.length > 30) undoStack.current.shift();
     redoStack.current = []; // 新操作使重做栈失效
     setUndoCount(undoStack.current.length);
@@ -357,8 +365,9 @@ export default function Workbench({ id, title, cover, docSize: initialDocSize }:
   const undo = useCallback(() => {
     const prev = undoStack.current.pop();
     if (!prev) return;
-    redoStack.current.push(layersRef.current);
-    setLayers(prev);
+    redoStack.current.push({ layers: layersRef.current, docSize: docSizeRef.current });
+    setLayers(prev.layers);
+    setDocSize(prev.docSize);
     setUndoCount(undoStack.current.length);
     setRedoCount(redoStack.current.length);
     clearSel();
@@ -366,12 +375,44 @@ export default function Workbench({ id, title, cover, docSize: initialDocSize }:
   const redo = useCallback(() => {
     const next = redoStack.current.pop();
     if (!next) return;
-    undoStack.current.push(layersRef.current);
-    setLayers(next);
+    undoStack.current.push({ layers: layersRef.current, docSize: docSizeRef.current });
+    setLayers(next.layers);
+    setDocSize(next.docSize);
     setUndoCount(undoStack.current.length);
     setRedoCount(redoStack.current.length);
     clearSel();
   }, []);
+
+  // 打开画布尺寸对话框：用当前尺寸预填
+  const openResize = () => {
+    setRw(String(docSize.w));
+    setRh(String(docSize.h));
+    setResizeMode("crop");
+    setResizeOpen(true);
+  };
+
+  // 应用画布尺寸：裁剪（画布大小，内容不动）/ 拉伸（图像大小，内容按比例缩放）
+  const applyResize = () => {
+    const w = Math.max(16, Math.min(10000, parseInt(rw) || docSize.w));
+    const h = Math.max(16, Math.min(10000, parseInt(rh) || docSize.h));
+    setResizeOpen(false);
+    if (w === docSize.w && h === docSize.h) return;
+    const sw = w / docSize.w, sh = h / docSize.h;
+    pushUndo();
+    if (resizeMode === "stretch") {
+      setLayers(ls => ls.map(l => ({
+        ...l,
+        shapes: l.shapes.map(s => {
+          if (s.kind === "line") return { ...s, points: s.points.map((p, i) => p * (i % 2 === 0 ? sw : sh)), strokeWidth: s.strokeWidth * Math.sqrt(sw * sh) };
+          if (s.kind === "rect") return { ...s, x: s.x * sw, y: s.y * sh, w: s.w * sw, h: s.h * sh, cornerRadius: s.cornerRadius * Math.min(sw, sh) };
+          if (s.kind === "image") return { ...s, x: s.x * sw, y: s.y * sh, w: s.w * sw, h: s.h * sh };
+          if (s.kind === "text") return { ...s, x: s.x * sw, y: s.y * sh, fontSize: s.fontSize * sh };
+          return s;
+        }),
+      })));
+    }
+    setDocSize({ w, h });
+  };
 
   // 快速抠像：底图 → 白底合成 → onnxruntime-web u2netp → 透明背景主体图层（置于最上层）
   const doMatting = async () => {
@@ -1024,7 +1065,10 @@ export default function Workbench({ id, title, cover, docSize: initialDocSize }:
       <header className="flex h-11 shrink-0 items-center gap-3 border-b border-border px-3">
         <Link href="/projects" className="flex h-7 w-7 items-center justify-center rounded-md border border-border text-xs text-foreground/60 transition hover:border-foreground/30 hover:text-foreground">←</Link>
         <span className="text-sm font-medium text-foreground/90">{title}</span>
-        <span className="rounded-md border border-border px-2 py-0.5 text-[11px] tabular-nums text-foreground/45">{docSize.w} × {docSize.h} px</span>
+        <button onClick={openResize} title="修改画布尺寸（裁剪 / 拉伸）"
+          className="rounded-md border border-border px-2 py-0.5 text-[11px] tabular-nums text-foreground/45 transition hover:border-foreground/30 hover:text-foreground">
+          {docSize.w} × {docSize.h} px
+        </button>
         <div className="ml-auto flex items-center gap-1.5">
           <button onClick={() => setZoom(z => Math.min(8, z * 1.2))} className="h-7 w-7 rounded-md border border-border text-sm text-foreground/60 transition hover:text-foreground">+</button>
           <span className="w-12 text-center text-[11px] tabular-nums text-foreground/50">{Math.round(zoom * 100)}%</span>
@@ -1416,6 +1460,50 @@ export default function Workbench({ id, title, cover, docSize: initialDocSize }:
           </div>
         </aside>
       </div>
+
+      {/* 画布尺寸对话框（裁剪 / 拉伸） */}
+      {resizeOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={() => setResizeOpen(false)}>
+          <div className="w-[380px] rounded-2xl border border-border bg-card p-6 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            <h2 className="mb-4 text-sm font-medium text-foreground/80">画布尺寸</h2>
+            {/* 模式切换 */}
+            <div className="mb-4 flex gap-2">
+              {([["crop", "裁剪（画布大小）"], ["stretch", "拉伸（图像大小）"]] as const).map(([m, label]) => (
+                <button key={m} onClick={() => setResizeMode(m)}
+                  className={`flex-1 rounded-lg border px-3 py-2 text-xs transition ${resizeMode === m ? "text-foreground" : "border-border text-foreground/55 hover:border-foreground/25"}`}
+                  style={resizeMode === m ? { borderColor: "var(--brand-cyan)" } : undefined}>
+                  {label}
+                </button>
+              ))}
+            </div>
+            {/* 宽高 */}
+            <div className="mb-4 flex items-center gap-2">
+              <label className="flex-1">
+                <span className="mb-1 block text-[11px] text-foreground/45">宽（px）</span>
+                <input value={rw} onChange={(e) => setRw(e.target.value.replace(/\D/g, ""))}
+                  className="w-full rounded-lg border border-border bg-black/40 px-3 py-2 text-sm tabular-nums focus:border-foreground/30 focus:outline-none" />
+              </label>
+              <span className="mt-5 text-foreground/40">×</span>
+              <label className="flex-1">
+                <span className="mb-1 block text-[11px] text-foreground/45">高（px）</span>
+                <input value={rh} onChange={(e) => setRh(e.target.value.replace(/\D/g, ""))}
+                  className="w-full rounded-lg border border-border bg-black/40 px-3 py-2 text-sm tabular-nums focus:border-foreground/30 focus:outline-none" />
+              </label>
+            </div>
+            <p className="mb-4 text-[11px] text-foreground/40">
+              {resizeMode === "crop" ? "裁剪：画布改大小，内容不动，超出部分被裁掉" : "拉伸：内容随画布等比缩放变形"}
+            </p>
+            {/* 操作 */}
+            <div className="flex justify-end gap-2">
+              <button onClick={() => setResizeOpen(false)}
+                className="rounded-lg px-4 py-2 text-sm text-foreground/60 transition hover:bg-accent hover:text-foreground">取消</button>
+              <button onClick={applyResize}
+                className="rounded-lg px-4 py-2 text-sm font-medium text-primary-foreground transition hover:opacity-90"
+                style={{ background: "oklch(0.94 0 0)" }}>应用</button>
+            </div>
+          </div>
+        </div>
+      )}
     </main>
   );
 }
