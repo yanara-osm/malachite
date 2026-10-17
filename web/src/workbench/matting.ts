@@ -1,4 +1,4 @@
-// 纯前端智能抠像：onnxruntime-web (WASM 多线程) 跑 u2netp
+// 纯前端快速抠像：onnxruntime-web (WASM 多线程) 跑 u2netp
 // 4.36MB 模型，320×320 输入，秒级推理
 // 预处理/后处理与 rembg U2netpSession 完全对齐
 
