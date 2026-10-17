@@ -184,7 +184,8 @@ export default function Home() {
 
           <h1 className="fade-up mb-2 text-center text-2xl font-medium tracking-[0.18em] text-foreground/90"
             style={{ fontFamily: "var(--font-serif-sc)", animationDelay: "0.15s" }}>
-            孔雀翎 <span className="text-foreground/45 tracking-[0.25em]">Malachite</span>
+            孔雀翎
+            <span className="mt-1 block font-sans text-sm font-normal tracking-[0.35em] text-foreground/45">Malachite</span>
           </h1>
           <p className="fade-up text-center text-sm text-foreground/60" style={{ animationDelay: "0.25s" }}>
             智能体做你的美术，你负责修改与审查
