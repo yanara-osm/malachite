@@ -710,15 +710,15 @@ export default function Workbench({ id, title, cover }: { id: string; title: str
           <div className="flex-1 overflow-y-auto p-3">
             <p className="mb-2 text-[10px] tracking-widest text-foreground/40">图层</p>
             <div className="space-y-1">
-              {layers.map(l => (
+              {[...layers].reverse().map(l => (
                 <div key={l.id} onClick={() => setActiveLayer(l.id)}
                   className={`group flex cursor-pointer items-center gap-2 rounded-lg border px-2 py-2 transition ${activeLayer === l.id ? "border-foreground/30 bg-foreground/10" : "border-transparent hover:bg-foreground/5"}`}>
                   <button onClick={(e) => { e.stopPropagation(); toggleVis(l.id); }}
                     className="text-xs text-foreground/50 hover:text-foreground">{l.visible ? "◉" : "◎"}</button>
                   <span className="flex-1 truncate text-xs text-foreground/80">{l.name}</span>
                   <div className="hidden gap-0.5 group-hover:block">
-                    <button onClick={(e) => { e.stopPropagation(); moveLayer(l.id, -1); }} className="px-1 text-[10px] text-foreground/40 hover:text-foreground">↑</button>
-                    <button onClick={(e) => { e.stopPropagation(); moveLayer(l.id, 1); }} className="px-1 text-[10px] text-foreground/40 hover:text-foreground">↓</button>
+                    <button title="上移一层" onClick={(e) => { e.stopPropagation(); moveLayer(l.id, 1); }} className="px-1 text-[10px] text-foreground/40 hover:text-foreground">↑</button>
+                    <button title="下移一层" onClick={(e) => { e.stopPropagation(); moveLayer(l.id, -1); }} className="px-1 text-[10px] text-foreground/40 hover:text-foreground">↓</button>
                   </div>
                 </div>
               ))}
