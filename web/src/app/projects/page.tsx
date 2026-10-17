@@ -2,6 +2,8 @@
 
 import Image from "next/image";
 import Link from "next/link";
+import { useState } from "react";
+import { getDragProjects, saveDragProject, fileToDataUrl, DragProject } from "@/lib/projects";
 
 const PROJECTS = [
   { id: "ink", title: "水墨山水海报", time: "2 小时前", steps: 12, img: "/presets/ink.png" },
@@ -13,8 +15,38 @@ const PROJECTS = [
 ];
 
 export default function ProjectPool() {
+  const [dragOver, setDragOver] = useState(false);
+  const [dragProjects, setDragProjects] = useState<DragProject[]>([]);
+
+  const onDrop = async (e: React.DragEvent) => {
+    e.preventDefault();
+    setDragOver(false);
+    const files = Array.from(e.dataTransfer.files).filter(f => f.type.startsWith("image/"));
+    if (!files.length) return;
+    const added: DragProject[] = [];
+    for (const f of files) {
+      const img = await fileToDataUrl(f, 1024);
+      added.push({
+        id: "d" + Date.now() + Math.random().toString(36).slice(2, 6),
+        title: f.name.replace(/\.\w+$/, ""),
+        img,
+        time: "刚刚",
+        steps: 1,
+      });
+    }
+    let list: DragProject[] = [];
+    for (const p of added) list = saveDragProject(p);
+    setDragProjects(list);
+  };
+
   return (
-    <main className="relative min-h-screen overflow-hidden bg-background">
+    <main
+      className="relative min-h-screen overflow-hidden bg-background"
+      onDragEnter={(e) => { e.preventDefault(); setDragOver(true); }}
+      onDragOver={(e) => e.preventDefault()}
+      onDragLeave={(e) => { e.preventDefault(); setDragOver(false); }}
+      onDrop={onDrop}
+    >
       {/* 背景光（极淡，同 v4）*/}
       <div className="pointer-events-none absolute inset-0">
         <div
@@ -22,6 +54,14 @@ export default function ProjectPool() {
           style={{ background: "radial-gradient(closest-side, oklch(0.6 0.16 210 / 0.4), transparent 72%)" }}
         />
       </div>
+
+      {/* 拖拽高亮 */}
+      {dragOver && (
+        <div className="pointer-events-none absolute inset-4 z-50 flex items-center justify-center rounded-2xl border-2 border-dashed"
+          style={{ borderColor: "oklch(0.82 0.16 180 / 0.8)", background: "oklch(0.82 0.16 180 / 0.06)" }}>
+          <p className="text-base font-medium" style={{ color: "oklch(0.85 0.14 190)" }}>松开 · 每张图片建一个新项目</p>
+        </div>
+      )}
 
       <div className="relative z-10 mx-auto max-w-5xl px-6 py-10">
         {/* 顶栏 */}
@@ -40,8 +80,30 @@ export default function ProjectPool() {
           </Link>
         </header>
 
-        {/* 卡片池 */}
+        {/* 卡片池：拖入的在前 */}
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+          {dragProjects.map((p) => (
+            <Link
+              key={p.id}
+              href={`/project/${p.id}`}
+              className="group relative aspect-[4/3] overflow-hidden rounded-xl border border-border transition hover:border-foreground/20"
+            >
+              <Image
+                src={p.img}
+                alt={p.title}
+                fill
+                sizes="(max-width:640px) 50vw, 33vw"
+                className="object-cover transition duration-500 ease-out group-hover:scale-105"
+              />
+              <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/20 to-black/5" />
+              <div className="absolute inset-x-0 bottom-0 p-3">
+                <p className="truncate text-sm font-medium text-white/95">{p.title}</p>
+                <p className="mt-0.5 text-[11px] text-white/60">
+                  {p.time} · {p.steps} 步
+                </p>
+              </div>
+            </Link>
+          ))}
           {PROJECTS.map((p) => (
             <Link
               key={p.id}
