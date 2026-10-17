@@ -32,7 +32,8 @@
       "icon": "build/icon.ico"
     },
     "portable": {
-      "artifactName": "Malachite-${version}-portable.exe"
+      "artifactName": "Malachite-${version}-portable.exe",
+      "splashImage": "splash.bmp"
     }
   }
 }
