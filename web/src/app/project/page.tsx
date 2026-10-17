@@ -26,16 +26,17 @@ function Inner() {
   const [ready, setReady] = useState(!id.startsWith("d"));
   const [cover, setCover] = useState(preset?.img ?? "/presets/ink.png");
   const [title, setTitle] = useState(preset?.title ?? "项目");
+  const [docSize, setDocSize] = useState<{ w: number; h: number } | undefined>(undefined);
 
   useEffect(() => {
     if (!id.startsWith("d")) return;
     const p = findDragProject(id);
-    if (p) { setCover(p.img); setTitle(p.title); }
+    if (p) { setCover(p.img); setTitle(p.title); setDocSize(p.docSize); }
     setReady(true);
   }, [id]);
 
   if (!ready) return LOADING;
-  return <Workbench id={id} title={title} cover={cover} />;
+  return <Workbench id={id} title={title} cover={cover} docSize={docSize} />;
 }
 
 export default function ProjectPage() {

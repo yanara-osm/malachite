@@ -11,6 +11,16 @@ const SUGGESTIONS = [
   "给角色换一套赛博朋克服装，保持姿态不变",
 ];
 
+// PS 式新建画布预设尺寸
+const CANVAS_PRESETS = [
+  { label: "方形 1:1", w: 1024, h: 1024 },
+  { label: "横屏 16:9", w: 1920, h: 1080 },
+  { label: "竖屏 9:16", w: 1080, h: 1920 },
+  { label: "横屏 4:3", w: 1600, h: 1200 },
+  { label: "竖屏 3:4", w: 1200, h: 1600 },
+  { label: "超宽 21:9", w: 2560, h: 1080 },
+];
+
 // 优雅粒子：logo 附近缓慢上升 + 正弦漂移 + 呼吸闪烁（青/金）
 function FeatherParticles() {
   const ref = useRef<HTMLCanvasElement>(null);
@@ -99,6 +109,10 @@ export default function Home() {
   const logoDepth = useRef(0);
   const fileRef = useRef<HTMLInputElement>(null);
   const router = useRouter();
+  // PS 式新建画布对话框
+  const [newCanvas, setNewCanvas] = useState(false);
+  const [cw, setCw] = useState("1920");
+  const [ch, setCh] = useState("1080");
 
   const accept = (files: FileList | null) => {
     const f = files?.[0];
@@ -122,6 +136,16 @@ export default function Home() {
     } finally {
       setCreating(false);
     }
+  };
+
+  // 新建空白画布（PS 式：预设 + 自定义宽高）
+  const createCanvas = () => {
+    const w = Math.max(16, Math.min(10000, parseInt(cw) || 1920));
+    const h = Math.max(16, Math.min(10000, parseInt(ch) || 1080));
+    const id = "d" + Date.now() + Math.random().toString(36).slice(2, 6);
+    saveDragProject({ id, title: `画布 ${w}×${h}`, img: "", docSize: { w, h }, time: "刚刚", steps: 0 });
+    setNewCanvas(false);
+    router.push(`/project?id=${id}`);
   };
 
   return (
@@ -149,14 +173,21 @@ export default function Home() {
       <FeatherParticles />
 
       <div className="relative z-10 mx-auto flex w-full max-w-3xl flex-1 flex-col items-center px-6 pb-12 min-h-0">
-        {/* 顶栏：项目入口 */}
-        <Link
-          href="/projects"
-          className="fade-up absolute right-6 top-6 rounded-full border border-border bg-card/60 px-4 py-1.5 text-xs text-foreground/60 backdrop-blur transition hover:border-foreground/25 hover:text-foreground"
-          style={{ animationDelay: "0.1s" }}
-        >
-          项目 →
-        </Link>
+        {/* 顶栏：新建画布 + 项目入口 */}
+        <div className="fade-up absolute right-6 top-6 flex items-center gap-2" style={{ animationDelay: "0.1s" }}>
+          <button
+            onClick={() => setNewCanvas(true)}
+            className="rounded-full border border-border bg-card/60 px-4 py-1.5 text-xs text-foreground/60 backdrop-blur transition hover:border-foreground/25 hover:text-foreground"
+          >
+            ＋ 新建画布
+          </button>
+          <Link
+            href="/projects"
+            className="rounded-full border border-border bg-card/60 px-4 py-1.5 text-xs text-foreground/60 backdrop-blur transition hover:border-foreground/25 hover:text-foreground"
+          >
+            项目 →
+          </Link>
+        </div>
 
         {/* 上半：logo + 标题，垂直居中占满 */}
         <div className="flex flex-1 flex-col items-center justify-center">
@@ -255,6 +286,52 @@ export default function Home() {
         </div>
 
       </div>
+
+      {/* PS 式新建画布对话框 */}
+      {newCanvas && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={() => setNewCanvas(false)}>
+          <div className="w-[420px] rounded-2xl border border-border bg-card p-6 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            <h2 className="mb-4 text-sm font-medium text-foreground/80">新建画布</h2>
+            {/* 预设 */}
+            <div className="mb-4 grid grid-cols-3 gap-2">
+              {CANVAS_PRESETS.map((p) => {
+                const active = cw === String(p.w) && ch === String(p.h);
+                return (
+                  <button key={p.label}
+                    onClick={() => { setCw(String(p.w)); setCh(String(p.h)); }}
+                    className={`rounded-lg border px-2 py-2 text-xs transition ${active ? "text-foreground" : "border-border text-foreground/60 hover:border-foreground/25"}`}
+                    style={active ? { borderColor: "var(--brand-cyan)" } : undefined}>
+                    <span className="block">{p.label}</span>
+                    <span className="mt-0.5 block text-[10px] text-foreground/40 tabular-nums">{p.w}×{p.h}</span>
+                  </button>
+                );
+              })}
+            </div>
+            {/* 自定义宽高 */}
+            <div className="mb-5 flex items-center gap-2">
+              <label className="flex-1">
+                <span className="mb-1 block text-[11px] text-foreground/45">宽（px）</span>
+                <input value={cw} onChange={(e) => setCw(e.target.value.replace(/\D/g, ""))}
+                  className="w-full rounded-lg border border-border bg-black/40 px-3 py-2 text-sm tabular-nums focus:border-foreground/30 focus:outline-none" />
+              </label>
+              <span className="mt-5 text-foreground/40">×</span>
+              <label className="flex-1">
+                <span className="mb-1 block text-[11px] text-foreground/45">高（px）</span>
+                <input value={ch} onChange={(e) => setCh(e.target.value.replace(/\D/g, ""))}
+                  className="w-full rounded-lg border border-border bg-black/40 px-3 py-2 text-sm tabular-nums focus:border-foreground/30 focus:outline-none" />
+              </label>
+            </div>
+            {/* 操作 */}
+            <div className="flex justify-end gap-2">
+              <button onClick={() => setNewCanvas(false)}
+                className="rounded-lg px-4 py-2 text-sm text-foreground/60 transition hover:bg-accent hover:text-foreground">取消</button>
+              <button onClick={createCanvas}
+                className="rounded-lg px-4 py-2 text-sm font-medium text-primary-foreground transition hover:opacity-90"
+                style={{ background: "oklch(0.94 0 0)" }}>创建</button>
+            </div>
+          </div>
+        </div>
+      )}
     </main>
   );
 }

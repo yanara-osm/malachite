@@ -2,9 +2,10 @@
 export interface DragProject {
   id: string;
   title: string;
-  img: string; // dataURL
+  img: string; // dataURL（空白画布为空字符串 ""）
   time: string;
   steps: number;
+  docSize?: { w: number; h: number }; // 空白画布的自定义尺寸（PS 式新建）
 }
 
 const KEY = "malachite:dragprojects";

@@ -7,7 +7,7 @@ import dynamic from "next/dynamic";
 import Link from "next/link";
 import Ruler from "./Ruler";
 import { DOC_W, DOC_H, DEFAULT_ADJUST, ADJUST_GROUPS, BLEND_TO_COMPOSITE, BLEND_MODES } from "./types";
-import type { Layer, Tool, StepEntry, BlendMode, ColorAdjust } from "./types";
+import type { Layer, Tool, StepEntry, BlendMode, ColorAdjust, ShapeNode } from "./types";
 import { applyColorGrade, isDefaultAdjust } from "./colorGrade";
 import ColorWheelPicker from "./ColorWheelPicker";
 import ApiAgent, { type ImageSource } from "./ApiAgent";
@@ -69,7 +69,7 @@ const STEPS: StepEntry[] = [
 const CHECKER =
   "repeating-conic-gradient(oklch(0.22 0.005 260) 0% 25%, oklch(0.16 0.005 260) 0% 50%) 0 / 16px 16px";
 
-export default function Workbench({ id, title, cover }: { id: string; title: string; cover: string }) {
+export default function Workbench({ id, title, cover, docSize: initialDocSize }: { id: string; title: string; cover: string; docSize?: { w: number; h: number } }) {
   const [zoom, setZoom] = useState(0.42);
   const [scroll, setScroll] = useState({ x: 0, y: 0 });
   const [tool, setTool] = useState<Tool>("brush");
@@ -85,8 +85,14 @@ export default function Workbench({ id, title, cover }: { id: string; title: str
         { id: "L3", name: "主峰标注", visible: true, opacity: 1, shapes: [{ kind: "text", x: 640, y: 300, text: "主峰", fontSize: 48, fill: "#1c1a17", stroke: "rgba(255,255,255,0.7)", strokeWidth: 1.5, opacity: 1 }] },
       ];
     }
+    // 空白画布（无 cover）：白色背景 rect；否则底图 image
+    const iw = initialDocSize?.w ?? DOC_W;
+    const ih = initialDocSize?.h ?? DOC_H;
+    const baseShape: ShapeNode = cover
+      ? { kind: "image", x: 0, y: 0, w: iw, h: ih, src: cover, opacity: 1 }
+      : { kind: "rect", x: 0, y: 0, w: iw, h: ih, fill: "#ffffff", opacity: 1, cornerRadius: 0 };
     return [
-      { id: "L1", name: "底图", visible: true, opacity: 1, shapes: [{ kind: "image", x: 0, y: 0, w: DOC_W, h: DOC_H, src: cover, opacity: 1 }] },
+      { id: "L1", name: cover ? "底图" : "背景", visible: true, opacity: 1, shapes: [baseShape] },
     ];
   });
   const [activeLayer, setActiveLayer] = useState(() => {
@@ -106,7 +112,9 @@ export default function Workbench({ id, title, cover }: { id: string; title: str
   const [viewSize, setViewSize] = useState({ w: 900, h: 560 });
   const [docSize, setDocSize] = useState(() => {
     const saved = loadProjectState(id);
-    return saved?.docSize && saved.docSize.w > 0 && saved.docSize.h > 0 ? saved.docSize : { w: DOC_W, h: DOC_H };
+    if (saved?.docSize && saved.docSize.w > 0 && saved.docSize.h > 0) return saved.docSize;
+    if (initialDocSize && initialDocSize.w > 0 && initialDocSize.h > 0) return initialDocSize;
+    return { w: DOC_W, h: DOC_H };
   });
 
   // 拖拽新建项目（d 前缀）：文档尺寸 + 底图跟随图片真实长宽比（demo 项目保持 DOC_W/DOC_H）
