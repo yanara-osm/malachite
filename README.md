@@ -64,6 +64,21 @@ OSM 开源电影（OPEN SOURCE FILM）厂牌下的开源 AIGC 图像工作台。
 - [ ] Electron 本地版
 - [ ] 工作流市场上架（RunningHub 现成工作流当"滤镜"）
 
+## 本地模型与运行时（不进 git）
+
+`public/models/*.onnx` 与 `public/ort-wasm*` 是本地大文件，.gitignore 已排除，clone 后需手动补齐：
+
+```bash
+# 1. onnxruntime-web 的 wasm 运行时（WebGPU 后端必需 asyncify + jsep 变体）
+bash web/scripts/setup-ort-wasm.sh
+
+# 2. SAM 分割模型（官方 ViT-B，schmuell/sam-b-fp16，需走代理）
+#    encoder fp16 172MB → public/models/sam_b_encoder.onnx
+#    decoder       16MB → public/models/sam_b_decoder.onnx
+```
+
+缺 wasm 会报 `no available backend found`；缺 asyncify 会报 `Failed to fetch ... asyncify.mjs`。
+
 ## License
 
 MIT

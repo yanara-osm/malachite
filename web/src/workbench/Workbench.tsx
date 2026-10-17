@@ -9,7 +9,7 @@ import Ruler from "./Ruler";
 import { DOC_W, DOC_H } from "./types";
 import type { Layer, Tool, StepEntry } from "./types";
 import { magicWand, lasso, rectSelection, ellipseSelection, fillSelection, extractSelection, selectionToCanvas, type Selection } from "./selection";
-import { samEmbed, samPredict, samComposite, samClearCache, type SamPoint } from "./sam";
+import { samEmbed, samPredict, samComposite, samSegmentAll, samExtractRegion, samClearCache, type SamPoint, type SamRegion } from "./sam";
 
 const KonvaStage = dynamic(() => import("react-konva").then(m => m.Stage), { ssr: false });
 
@@ -126,6 +126,10 @@ export default function Workbench({ id, title, cover }: { id: string; title: str
   // SAM 交互态：累积的点、实时 mask 预览
   const [samPoints, setSamPoints] = useState<SamPoint[]>([]);
   const [samMask, setSamMask] = useState<HTMLCanvasElement | null>(null);
+  // 全景分割态：彩色叠图 + 元素列表 + 进度
+  const [samOverlay, setSamOverlay] = useState<HTMLCanvasElement | null>(null);
+  const [samRegions, setSamRegions] = useState<SamRegion[]>([]);
+  const [samAllBusy, setSamAllBusy] = useState<{ done: number; total: number } | null>(null);
   const samBaseRef = useRef<{ canvas: HTMLCanvasElement; x: number; y: number; layerId: string } | null>(null);
   const lassoPts = useRef<{ x: number; y: number }[]>([]);
   const undoStack = useRef<Layer[][]>([]);
@@ -431,6 +435,79 @@ export default function Workbench({ id, title, cover }: { id: string; title: str
   const samReset = () => {
     setSamPoints([]);
     setSamMask(null);
+    setSamOverlay(null);
+    setSamRegions([]);
+  };
+
+  // SAM 全景分割：一次分全部元素，彩色叠图
+  const samSegmentAllNow = async () => {
+    if (aiBusy || samAllBusy) return;
+    setAiBusy(true);
+    setSamAllBusy({ done: 0, total: 0 });
+    try {
+      setMattingError(null);
+      const base = await getSamBase();
+      if (!base) { setMattingError("没有可分割的图层"); return; }
+      const { overlay, regions } = await samSegmentAll(base.canvas, base.layerId, 16, (done, total) => {
+        setSamAllBusy({ done, total });
+      });
+      setSamOverlay(overlay);
+      setSamRegions(regions);
+      setSamPoints([]);
+      setSamMask(null);
+    } catch (e: any) {
+      setMattingError("全景分割失败：" + (e?.message || e));
+    } finally {
+      setAiBusy(false);
+      setSamAllBusy(null);
+    }
+  };
+
+  // SAM 全景模式：点击叠图某个颜色 → 抠出该元素为新图层
+  const samPickRegion = async (docX: number, docY: number) => {
+    if (!samOverlay || samRegions.length === 0 || aiBusy) return;
+    const base = samBaseRef.current;
+    if (!base) return;
+    // 文档坐标 → overlay 局部坐标
+    const lx = Math.round(docX - base.x), ly = Math.round(docY - base.y);
+    if (lx < 0 || ly < 0 || lx >= samOverlay.width || ly >= samOverlay.height) return;
+    const ctx = samOverlay.getContext("2d")!;
+    const px = ctx.getImageData(lx, ly, 1, 1).data;
+    if (px[3] === 0) { setMattingError("此处没有检测到元素"); return; }
+    const region = samRegions.find(r => {
+      const [rr, gg, bb] = [parseInt(r.color.slice(1, 3), 16), parseInt(r.color.slice(3, 5), 16), parseInt(r.color.slice(5, 7), 16)];
+      return rr === px[0] && gg === px[1] && bb === px[2];
+    });
+    if (!region) { setMattingError("未匹配到元素（颜色反查失败）"); return; }
+    await extractRegionToLayer(region);
+  };
+
+  // 按索引抠出某个元素（属性栏色块用）
+  const pickRegionByIndex = async (idx: number) => {
+    const region = samRegions[idx];
+    if (!region || aiBusy) return;
+    await extractRegionToLayer(region);
+  };
+
+  // 把某个 region 抠成透明背景新图层（公共逻辑）
+  const extractRegionToLayer = async (region: SamRegion) => {
+    const base = samBaseRef.current;
+    if (!base) return;
+    setAiBusy(true);
+    try {
+      const out = await samExtractRegion(base.canvas, region);
+      const dataUrl = out.toDataURL("image/png");
+      pushUndo();
+      const nl: Layer = { id: "sam_" + Date.now(), name: "SAM 元素", visible: true, opacity: 1, shapes: [{ kind: "image", x: base.x, y: base.y, w: out.width, h: out.height, src: dataUrl, opacity: 1 }] };
+      setLayers(ls => [...ls, nl]);
+      setActiveLayer(nl.id);
+      setTool("move");
+      samReset();
+    } catch (e: any) {
+      setMattingError("抠出元素失败：" + (e?.message || e));
+    } finally {
+      setAiBusy(false);
+    }
   };
 
   // 快速填充（纯前端）：选区边缘取色 → 多轮向内扩散 → 填充
@@ -584,7 +661,8 @@ export default function Workbench({ id, title, cover }: { id: string; title: str
     const p = toStage(e);
     if (tool === "wand") { onWand(p.x, p.y); return; }
     if (tool === "sam") {
-      // 官方范式：左键=前景点，右键=背景点（排除）
+      // 全景叠图模式下：点击抠出元素；否则官方点选范式（左键前景/右键背景）
+      if (samOverlay) { samPickRegion(p.x, p.y); return; }
       const isRight = e.evt && e.evt.button === 2;
       samAddPoint(p.x, p.y, isRight ? 0 : 1);
       return;
@@ -859,16 +937,37 @@ export default function Workbench({ id, title, cover }: { id: string; title: str
           <>
             <span className="text-foreground/50">SAM 分割</span>
             <span className="h-4 w-px bg-border" />
-            <span className="text-[11px] text-foreground/40">
-              {samPoints.length === 0
-                ? "左键点击物体 · 右键排除区域"
-                : `已选 ${samPoints.length} 点${aiBusy ? " · 计算中…" : ""}`}
-            </span>
+            <button onClick={samSegmentAllNow} disabled={aiBusy || samAllBusy !== null}
+              title="一次分割出图中所有元素，彩色叠图后点击抠出"
+              className={`h-6 rounded-md border px-2 text-[11px] transition ${aiBusy || samAllBusy !== null ? "border-border text-foreground/30" : "border-foreground/30 bg-foreground/5 text-foreground/80 hover:bg-foreground/15 hover:text-foreground"}`}>全景分割</button>
             <span className="h-4 w-px bg-border" />
-            <button onClick={samConfirm} disabled={samPoints.length === 0 || aiBusy}
-              className={`h-6 rounded-md border px-2 transition ${samPoints.length === 0 || aiBusy ? "border-border text-foreground/30" : "border-foreground/30 bg-foreground/5 text-foreground/80 hover:bg-foreground/15 hover:text-foreground"}`}>确认导出</button>
-            <button onClick={samReset} disabled={samPoints.length === 0}
-              className={`h-6 rounded-md border border-border px-2 transition ${samPoints.length === 0 ? "text-foreground/30" : "text-foreground/50 hover:text-foreground"}`}>重置</button>
+            {samAllBusy ? (
+              <span className="text-[11px] text-foreground/60">分割中 {samAllBusy.done}/{samAllBusy.total} …</span>
+            ) : samOverlay ? (
+              <>
+                <span className="text-[11px] text-foreground/40">检测到 {samRegions.length} 个元素 · 点击叠图上的颜色抠出</span>
+                <div className="flex max-w-[40%] items-center gap-1 overflow-x-auto">
+                  {samRegions.map((r, i) => (
+                    <button key={i} onClick={() => pickRegionByIndex(i)} title={`抠出元素 ${i + 1}`}
+                      className="h-4 w-4 shrink-0 rounded-sm border border-black/30" style={{ background: r.color }} />
+                  ))}
+                </div>
+                <button onClick={samReset} className="h-6 rounded-md border border-border px-2 text-[11px] text-foreground/50 transition hover:text-foreground">清除叠图</button>
+              </>
+            ) : (
+              <>
+                <span className="text-[11px] text-foreground/40">
+                  {samPoints.length === 0
+                    ? "左键点击物体 · 右键排除区域"
+                    : `已选 ${samPoints.length} 点${aiBusy ? " · 计算中…" : ""}`}
+                </span>
+                <span className="h-4 w-px bg-border" />
+                <button onClick={samConfirm} disabled={samPoints.length === 0 || aiBusy}
+                  className={`h-6 rounded-md border px-2 transition ${samPoints.length === 0 || aiBusy ? "border-border text-foreground/30" : "border-foreground/30 bg-foreground/5 text-foreground/80 hover:bg-foreground/15 hover:text-foreground"}`}>确认导出</button>
+                <button onClick={samReset} disabled={samPoints.length === 0}
+                  className={`h-6 rounded-md border border-border px-2 transition ${samPoints.length === 0 ? "text-foreground/30" : "text-foreground/50 hover:text-foreground"}`}>重置</button>
+              </>
+            )}
           </>
         ) : (tool === "brush" || tool === "eraser") ? (
           <>
@@ -974,7 +1073,10 @@ export default function Workbench({ id, title, cover }: { id: string; title: str
                   <KLayer ref={overlayRef}>
                     {selCanvas && <KImage image={selCanvas} x={0} y={0} width={docSize.w} height={docSize.h} opacity={0.85} listening={false} />}
                     {/* SAM mask 预览 + 点标记（青色=前景点，红=背景点） */}
-                    {tool === "sam" && samMask && samBaseRef.current && (
+                    {tool === "sam" && samOverlay && samBaseRef.current && (
+                      <KImage image={samOverlay} x={samBaseRef.current.x} y={samBaseRef.current.y} width={samOverlay.width} height={samOverlay.height} opacity={0.55} listening={false} />
+                    )}
+                    {tool === "sam" && samMask && !samOverlay && samBaseRef.current && (
                       <KImage image={samMask} x={samBaseRef.current.x} y={samBaseRef.current.y} width={samMask.width} height={samMask.height} opacity={0.9} listening={false} />
                     )}
                     {tool === "sam" && samPoints.map((p, i) => (
