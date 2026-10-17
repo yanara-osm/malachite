@@ -57,7 +57,7 @@ const CHECKER =
 export default function Workbench({ id, title, cover }: { id: string; title: string; cover: string }) {
   const [zoom, setZoom] = useState(0.42);
   const [scroll, setScroll] = useState({ x: 0, y: 0 });
-  const [tool, setTool] = useState<Tool>("move");
+  const [tool, setTool] = useState<Tool>("brush");
   const [layers, setLayers] = useState<Layer[]>(() => {
     // 只有水墨 demo 项目带预置图层，其他项目只有底图
     if (id === "ink") {
