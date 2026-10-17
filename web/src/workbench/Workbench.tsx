@@ -801,7 +801,7 @@ export default function Workbench({ id, title, cover }: { id: string; title: str
               <div className="absolute" style={{ left: viewW / 2 - scroll.x * zoom, top: viewH / 2 - scroll.y * zoom, width: docSize.w * zoom, height: docSize.h * zoom, background: CHECKER, boxShadow: "0 0 0 1px oklch(0.3 0.01 260), 0 12px 40px -12px black" }}>
                 <KonvaStage
                   ref={stageRef}
-                  width={docSize.w} height={docSize.h}
+                  width={docSize.w * zoom} height={docSize.h * zoom}
                   scaleX={zoom} scaleY={zoom}
                   onMouseDown={onStageMouseDown}
                   onMouseMove={onStageMouseMove}
