@@ -2,6 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { fileToDataUrl, saveDragProject } from "@/lib/projects";
 
 const SUGGESTIONS = [
   "把这张照片改成水墨风格，保留主体轮廓",
@@ -91,13 +93,34 @@ export default function Home() {
   const [text, setText] = useState("");
   const [img, setImg] = useState<{ url: string; name: string } | null>(null);
   const [drag, setDrag] = useState(false);
+  const [logoDrag, setLogoDrag] = useState(false);
+  const [creating, setCreating] = useState(false);
   const depth = useRef(0);
+  const logoDepth = useRef(0);
   const fileRef = useRef<HTMLInputElement>(null);
+  const router = useRouter();
 
   const accept = (files: FileList | null) => {
     const f = files?.[0];
     if (f && f.type.startsWith("image/")) {
       setImg({ url: URL.createObjectURL(f), name: f.name });
+    }
+  };
+
+  // 拖图到 logo → 创建新项目 → 跳编辑页
+  const onLogoDrop = async (e: React.DragEvent) => {
+    e.preventDefault(); e.stopPropagation();
+    logoDepth.current = 0; setLogoDrag(false);
+    const f = Array.from(e.dataTransfer.files).find(f => f.type.startsWith("image/"));
+    if (!f || creating) return;
+    setCreating(true);
+    try {
+      const dataUrl = await fileToDataUrl(f, 1024);
+      const id = "d" + Date.now() + Math.random().toString(36).slice(2, 6);
+      saveDragProject({ id, title: f.name.replace(/\.\w+$/, ""), img: dataUrl, time: "刚刚", steps: 1 });
+      router.push(`/project/${id}`);
+    } finally {
+      setCreating(false);
     }
   };
 
@@ -137,9 +160,26 @@ export default function Home() {
 
         {/* 上半：logo + 标题，垂直居中占满 */}
         <div className="flex flex-1 flex-col items-center justify-center">
-          {/* 孔雀翎 logo */}
-          <div className="fade-up mb-8" style={{ animationDelay: "0.05s" }}>
-            <img src="/logo.png" alt="孔雀翎" className="h-80 w-80 object-contain" />
+          {/* 孔雀翎 logo（拖图到此 → 新建项目）*/}
+          <div
+            className="fade-up relative mb-8"
+            style={{ animationDelay: "0.05s" }}
+            onDragEnter={(e) => { e.preventDefault(); logoDepth.current += 1; setLogoDrag(true); }}
+            onDragOver={(e) => e.preventDefault()}
+            onDragLeave={(e) => { e.preventDefault(); logoDepth.current = Math.max(0, logoDepth.current - 1); if (logoDepth.current === 0) setLogoDrag(false); }}
+            onDrop={onLogoDrop}
+          >
+            <img src="/logo.png" alt="孔雀翎"
+              className={`h-80 w-80 object-contain transition duration-300 ${logoDrag ? "scale-105" : ""}`}
+              style={logoDrag ? { filter: "drop-shadow(0 0 24px oklch(0.82 0.16 180 / 0.6))" } : undefined} />
+            {logoDrag && (
+              <div className="absolute inset-0 flex items-center justify-center rounded-3xl border-2 border-dashed"
+                style={{ borderColor: "oklch(0.82 0.16 180 / 0.7)", background: "oklch(0.82 0.16 180 / 0.07)" }}>
+                <span className="text-sm font-medium" style={{ color: "var(--brand-cyan)" }}>
+                  {creating ? "正在创建项目…" : "松开 · 新建项目并打开"}
+                </span>
+              </div>
+            )}
           </div>
 
           <h1 className="fade-up mb-2 text-center text-2xl font-medium tracking-[0.18em] text-foreground/90"
