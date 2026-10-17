@@ -208,6 +208,34 @@ export default function Workbench({ id, title, cover }: { id: string; title: str
     clearSel();
   }, []);
 
+  // 智能抠像：当前画面 → rembg（本地 U2-Net）→ 透明背景 PNG 作为新图层
+  const doMatting = async () => {
+    const st = stageRef.current;
+    if (!st || aiBusy) return;
+    setAiBusy(true);
+    try {
+      const dataUrl = st.toDataURL({ pixelRatio: 1 });
+      const res = await fetch("/api/matting", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ dataUrl }),
+      });
+      if (!res.ok) { const e = await res.json(); alert("抠像失败: " + e.error); return; }
+      const { dataUrl: cutout } = await res.json();
+      pushUndo();
+      const lid = "L" + Date.now();
+      setLayers(ls => [
+        ...ls,
+        { id: lid, name: "智能抠像", visible: true, opacity: 1, shapes: [{ kind: "image", x: 0, y: 0, w: docSize.w, h: docSize.h, src: cutout, opacity: 1 }] },
+      ]);
+      setActiveLayer(lid);
+    } catch (e: any) {
+      alert("抠像失败: " + e.message);
+    } finally {
+      setAiBusy(false);
+    }
+  };
+
   // 智能填充（纯前端）：选区边缘取色 → 多轮向内扩散 → 填充
   const doSmartFill = async () => {
     if (!selection || aiBusy) return;
@@ -508,8 +536,12 @@ export default function Workbench({ id, title, cover }: { id: string; title: str
           ))}
           {/* AI 区 */}
           <div className="mt-2 w-8 border-t border-border pt-2">
+            <button title="智能抠像（rembg 主体提取）" onClick={doMatting} disabled={aiBusy}
+              className={`flex h-9 w-9 items-center justify-center rounded-lg text-sm transition ${aiBusy ? "animate-pulse text-foreground/40" : "text-foreground/60 hover:bg-foreground/10 hover:text-foreground"}`}>
+              ✂
+            </button>
             <button title="智能填充（选区边缘扩散）" onClick={doSmartFill} disabled={aiBusy || !selection}
-              className={`flex h-9 w-9 items-center justify-center rounded-lg text-sm transition ${(aiBusy || !selection) ? "text-foreground/25" : "text-foreground/60 hover:bg-foreground/10 hover:text-foreground"}`}>
+              className={`mt-1 flex h-9 w-9 items-center justify-center rounded-lg text-sm transition ${(aiBusy || !selection) ? "text-foreground/25" : "text-foreground/60 hover:bg-foreground/10 hover:text-foreground"}`}>
               ✦
             </button>
           </div>
