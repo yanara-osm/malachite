@@ -8,7 +8,7 @@ import Link from "next/link";
 import Ruler from "./Ruler";
 import { DOC_W, DOC_H } from "./types";
 import type { Layer, Tool, StepEntry } from "./types";
-import { magicWand, lasso, rectSelection, ellipseSelection, fillSelection, selectionToCanvas, type Selection } from "./selection";
+import { magicWand, lasso, rectSelection, ellipseSelection, fillSelection, extractSelection, selectionToCanvas, type Selection } from "./selection";
 
 const KonvaStage = dynamic(() => import("react-konva").then(m => m.Stage), { ssr: false });
 
@@ -251,6 +251,30 @@ export default function Workbench({ id, title, cover }: { id: string; title: str
   };
   const commitSelection = (sel: Selection) => { setSelection(sel); setSelCanvas(selectionToCanvas(sel)); };
   const clearSel = () => { setSelection(null); setSelCanvas(null); setWandClicks(0); };
+
+  // 选区抠出新图层：选区内像素保留、选区外透明，作为新图层置于活动图层之上（原图层不动）
+  const duplicateSelection = () => {
+    if (!selection) return;
+    pushUndo();
+    (async () => {
+      const idata = await stageToImageData();
+      if (!idata) return;
+      const out = extractSelection(idata, selection);
+      const c = document.createElement("canvas");
+      c.width = out.width; c.height = out.height;
+      c.getContext("2d")!.putImageData(out, 0, 0);
+      const dataUrl = c.toDataURL("image/png");
+      const nl: Layer = { id: "dup_" + Date.now(), name: "抠出选区", visible: true, opacity: 1, shapes: [{ kind: "image", x: 0, y: 0, w: out.width, h: out.height, src: dataUrl, opacity: 1 }] };
+      setLayers(ls => {
+        const i = ls.findIndex(l => l.id === activeLayer);
+        const n = [...ls];
+        n.splice(i === -1 ? n.length : i, 0, nl);
+        return n;
+      });
+      setActiveLayer(nl.id);
+      setSelection(null); setSelCanvas(null);
+    })();
+  };
 
   // 放置文字（从输入浮层提交）
   const commitText = () => {
@@ -719,6 +743,7 @@ export default function Workbench({ id, title, cover }: { id: string; title: str
             </label>
             <button onClick={() => applySelection(fillColor)} title="油漆桶：把选区填成桶色" className="h-6 rounded-md border border-border px-2 text-foreground/70 transition hover:bg-secondary hover:text-foreground">油漆桶</button>
             <button onClick={() => applySelection(null)} className="h-6 rounded-md border border-border px-2 text-foreground/70 transition hover:bg-secondary hover:text-foreground">清除选区</button>
+            <button onClick={duplicateSelection} title="选区抠出：选区内像素保留、选区外透明，作为新图层" className="h-6 rounded-md border border-foreground/30 bg-foreground/5 px-2 text-foreground/80 transition hover:bg-foreground/15 hover:text-foreground">抠出新图层</button>
             <button onClick={clearSel} className="h-6 rounded-md border border-border px-2 text-foreground/50 transition hover:text-foreground">取消选区 (Esc)</button>
           </>
         ) : (tool === "brush" || tool === "eraser") ? (

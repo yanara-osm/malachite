@@ -101,6 +101,14 @@ export function fillSelection(imgData: ImageData, sel: Selection, color: string 
   return out;
 }
 
+// 选区抠出：选区内保留原像素，选区外透明（Ctrl+J / 拷贝到新图层）
+export function extractSelection(imgData: ImageData, sel: Selection): ImageData {
+  const out = new ImageData(new Uint8ClampedArray(imgData.data), imgData.width, imgData.height);
+  for (let i = 0; i < sel.data.length; i++)
+    if (!sel.data[i]) out.data[i * 4 + 3] = 0;
+  return out;
+}
+
 function hexToRgb(hex: string): { r: number; g: number; b: number } {
   const m = hex.replace('#', '');
   return {
