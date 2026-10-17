@@ -62,6 +62,7 @@ export default function ApiAgent({ onAddImage, getImageSource, hasSelection }: P
     if (!apiKey) { setError("请先到「AI API 管理」填 API Key"); return; }
     if (!def.webappId) { setError("该 API 缺 webappId"); return; }
     for (const p of def.params) {
+      if (p.type === "image") continue; // 图片参数走来源三选一自动取图，无需填值
       if (p.required && (values[p.key] === "" || values[p.key] === undefined)) {
         setError(`请填写「${p.label}」`); return;
       }
