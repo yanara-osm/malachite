@@ -5,8 +5,6 @@
 
 import * as ort from "onnxruntime-web";
 
-const MEAN = [123.675, 116.28, 103.53];
-const STD = [58.395, 57.12, 57.375];
 const DIM = 1024;
 
 export interface SamPoint {
@@ -68,9 +66,10 @@ async function encode(src: HTMLCanvasElement): Promise<ort.Tensor> {
   const input = new Float32Array(3 * plane);
   for (let i = 0; i < plane; i++) {
     const p = i * 4;
-    input[i] = (data[p] - MEAN[0]) / STD[0];
-    input[plane + i] = (data[p + 1] - MEAN[1]) / STD[1];
-    input[2 * plane + i] = (data[p + 2] - MEAN[2]) / STD[2];
+    // 注意：encoder ONNX 内部已 bake 归一化（Sub mean / Div std），此处喂原始 [0,255] 即可
+    input[i] = data[p];
+    input[plane + i] = data[p + 1];
+    input[2 * plane + i] = data[p + 2];
   }
   const tensor = new ort.Tensor("float32", input, [DIM, DIM, 3]);
   const enc = await getEnc();

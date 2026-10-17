@@ -2,7 +2,8 @@ import numpy as np
 import onnxruntime as ort
 from PIL import Image
 
-# SAM v1 标准预处理：长边 resize 到 1024，SAM 归一化，pad 到 1024x1024
+# SAM 预处理：长边 resize 到 1024，pad 到 1024x1024（零填充）。
+# 注意：encoder ONNX 内部已 bake 归一化（Sub mean / Div std），此处喂原始 [0,255]，不要再归一化！
 def preprocess(img_path):
     img = Image.open(img_path).convert("RGB")
     w, h = img.size
@@ -10,13 +11,9 @@ def preprocess(img_path):
     nw, nh = int(round(w * scale)), int(round(h * scale))
     img = img.resize((nw, nh), Image.BILINEAR)
     arr = np.array(img, dtype=np.float32)
-    # pad 到 1024x1024（零填充，SAM 用像素均值 114 无关紧要，decoder 只关心 embedding）
+    # pad 到 1024x1024（零填充）
     padded = np.zeros((1024, 1024, 3), dtype=np.float32)
     padded[:nh, :nw] = arr
-    # SAM 归一化
-    mean = np.array([123.675, 116.28, 103.53], dtype=np.float32)
-    std = np.array([58.395, 57.12, 57.375], dtype=np.float32)
-    padded = (padded - mean) / std
     return padded, (w, h), (nw, nh)
 
 print("=== encoder 测试 ===")
