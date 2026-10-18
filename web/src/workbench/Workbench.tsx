@@ -38,12 +38,12 @@ function UseImage(src: string | undefined) {
   return img;
 }
 
-function ImageShape({ s, forceSize }: { s: any; forceSize?: { w: number; h: number } }) {
+function ImageShape({ s, forceSize, extra }: { s: any; forceSize?: { w: number; h: number }; extra?: any }) {
   const img = UseImage(s.src);
   if (!img) return null;
   const w = forceSize ? forceSize.w : s.w;
   const h = forceSize ? forceSize.h : s.h;
-  return <KImage image={img} x={s.x} y={s.y} width={w} height={h} opacity={s.opacity} />;
+  return <KImage image={img} x={s.x} y={s.y} width={w} height={h} {...(extra ?? {})} />;
 }
 
 const TOOLS: { id: Tool; label: string; icon: string }[] = [
@@ -169,10 +169,10 @@ export default function Workbench({ id, title, cover, docSize: initialDocSize }:
   const [textInput, setTextInput] = useState("");
   const [textFontSize, setTextFontSize] = useState(48);
   const [textColor, setTextColor] = useState("#ffffff");
-  // 选中的画布文字（move 工具下点选）→ Transformer 自由变换
-  const [selText, setSelText] = useState<{ layer: string; index: number } | null>(null);
-  const selTextRef = useRef(selText);
-  selTextRef.current = selText;
+  // 选中的画布素材（move 工具下点选，任意类型：文字/图片/矩形/线）→ Transformer 自由变换
+  const [selShape, setSelShape] = useState<{ layer: string; index: number } | null>(null);
+  const selShapeRef = useRef(selShape);
+  selShapeRef.current = selShape;
   // 等比例变换开关（仿 PS：默认等比；Konva Transformer 原生支持拖动中按 Shift 临时反转）
   const [keepRatio, setKeepRatio] = useState(true);
   const transformerRef = useRef<any>(null);
@@ -252,8 +252,8 @@ export default function Workbench({ id, title, cover, docSize: initialDocSize }:
       const t = e.target as HTMLElement | null;
       if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable)) return;
       if (e.code === "Space") { e.preventDefault(); setSpaceDown(true); return; }
-      if (e.key === "Escape") { clearSel(); lassoPts.current = []; setLassoLive([]); setTextDraft(null); setSelText(null); }
-      if ((e.key === "Delete" || e.key === "Backspace") && selTextRef.current) { e.preventDefault(); deleteSelText(); }
+      if (e.key === "Escape") { clearSel(); lassoPts.current = []; setLassoLive([]); setTextDraft(null); setSelShape(null); }
+      if ((e.key === "Delete" || e.key === "Backspace") && selShapeRef.current) { e.preventDefault(); deleteSelShape(); }
       if ((e.ctrlKey || e.metaKey) && (e.key === "z" || e.key === "Z")) { e.preventDefault(); if (e.shiftKey) redo(); else undo(); }
       else if ((e.ctrlKey || e.metaKey) && (e.key === "y" || e.key === "Y")) { e.preventDefault(); redo(); }
     };
@@ -377,7 +377,7 @@ export default function Workbench({ id, title, cover, docSize: initialDocSize }:
       setLayers(ls => ls.map(l => l.id === activeLayer
         ? { ...l, shapes: [...l.shapes, { kind: "text", x: textDraft.x, y: textDraft.y, text: content, fontSize: textFontSize, fill: fill, opacity: 1 }] }
         : l));
-      setSelText({ layer: activeLayer, index: idx }); // 新文字置顶并立即选中，直接可变换
+      setSelShape({ layer: activeLayer, index: idx }); // 新文字置顶并立即选中，直接可变换
     }
     setTextDraft(null);
     setTool("move"); // 放完切回移动工具，避免误触
@@ -410,7 +410,7 @@ export default function Workbench({ id, title, cover, docSize: initialDocSize }:
   const editTextAt = (layerId: string, index: number) => {
     const s = layers.find(l => l.id === layerId)?.shapes[index];
     if (!s || s.kind !== "text") return;
-    setSelText(null);
+    setSelShape(null);
     setTextInput(s.text);
     setTextFontSize(s.fontSize);
     setTextColor(s.fill);
@@ -420,26 +420,26 @@ export default function Workbench({ id, title, cover, docSize: initialDocSize }:
     setTool("text");
   };
 
-  // 删除选中的文字（用 ref 读选中态，供 keydown 闭包安全调用）
-  const deleteSelText = () => {
-    const sel = selTextRef.current;
+  // 删除选中的素材（任意类型；用 ref 读选中态，供 keydown 闭包安全调用）
+  const deleteSelShape = () => {
+    const sel = selShapeRef.current;
     if (!sel) return;
     pushUndo();
     setLayers(ls => ls.map(l => l.id === sel.layer
       ? { ...l, shapes: l.shapes.filter((_, i) => i !== sel.index) }
       : l));
-    setSelText(null);
+    setSelShape(null);
   };
 
-  // 选中文字时：把 Transformer 挂到对应 Konva 节点上（经 layerRefs 找节点）
+  // 选中素材时：把 Transformer 挂到对应 Konva 节点上（经 layerRefs 找节点）
   useEffect(() => {
     const tr = transformerRef.current;
     if (!tr) return;
-    if (!selText) { tr.nodes([]); tr.getLayer()?.batchDraw(); return; }
-    const node = layerRefs.current[selText.layer]?.findOne(`.text-${selText.index}`);
+    if (!selShape) { tr.nodes([]); tr.getLayer()?.batchDraw(); return; }
+    const node = layerRefs.current[selShape.layer]?.findOne(`.shape-${selShape.index}`);
     tr.nodes(node ? [node] : []);
     tr.getLayer()?.batchDraw();
-  }, [selText, layers, zoom]);
+  }, [selShape, layers, zoom]);
 
   // 撤销：填充/清除前把 layers 快照压栈
   const pushUndo = useCallback(() => {
@@ -848,6 +848,11 @@ export default function Workbench({ id, title, cover, docSize: initialDocSize }:
     const isMove = tool === "move";
     if (spaceDown || isMiddle || isMove) {
       e.evt?.preventDefault?.();
+      // move 工具点空白 = 取消选中（素材/变换手柄自身的点击不会冒泡到这里）
+      if (isMove && !spaceDown && !isMiddle) {
+        const onTr = e.target?.findAncestor ? !!e.target.findAncestor("Transformer") : false;
+        if (!onTr) setSelShape(null);
+      }
       pan.current = { sx: e.evt.clientX, sy: e.evt.clientY, ox: scroll.x, oy: scroll.y };
       return;
     }
@@ -1278,9 +1283,12 @@ export default function Workbench({ id, title, cover, docSize: initialDocSize }:
               </label>
             )}
           </>
-        ) : tool === "move" && selText ? (
+        ) : tool === "move" && selShape ? (
           <>
-            <span className="text-foreground/50">变换文字</span>
+            <span className="text-foreground/50">变换{(() => {
+              const s = layers.find(l => l.id === selShape.layer)?.shapes[selShape.index];
+              return s ? (s.kind === "text" ? "文字" : s.kind === "image" ? "图片" : s.kind === "rect" ? "形状" : "线条") : "素材";
+            })()}</span>
             <span className="h-4 w-px bg-border" />
             <label className="flex cursor-pointer items-center gap-1.5 text-foreground/60" title="勾选后拉手柄保持长宽比（等比缩放）；取消勾选可单轴自由拉伸">
               <input type="checkbox" checked={keepRatio} onChange={e => setKeepRatio(e.target.checked)} className="h-3 w-3 accent-foreground/60" />
@@ -1288,7 +1296,7 @@ export default function Workbench({ id, title, cover, docSize: initialDocSize }:
             </label>
             <span className="text-[10px] text-foreground/30">{keepRatio ? "拉角等比缩放" : "拉边单轴拉伸"}</span>
             <span className="h-4 w-px bg-border" />
-            <button onClick={deleteSelText} className="h-6 rounded-md border border-border px-2 text-foreground/60 transition hover:text-foreground">删除 (Del)</button>
+            <button onClick={deleteSelShape} className="h-6 rounded-md border border-border px-2 text-foreground/60 transition hover:text-foreground">删除 (Del)</button>
           </>
         ) : (
           <span className="text-[11px] text-foreground/30">{TOOLS.find(t => t.id === tool)?.label ?? ""}</span>
@@ -1360,28 +1368,36 @@ export default function Workbench({ id, title, cover, docSize: initialDocSize }:
                       globalCompositeOperation={l.blendMode ? BLEND_TO_COMPOSITE[l.blendMode] : "source-over"}
                       ref={(ref) => { if (ref) layerRefs.current[l.id] = ref; else delete layerRefs.current[l.id]; }}>
                       {l.shapes.map((s, i) => {
-                        if (s.kind === "rect") return <KRect key={i} x={s.x} y={s.y} width={s.w} height={s.h} fill={s.fill} opacity={s.opacity} cornerRadius={s.cornerRadius} />;
+                        // 移动工具下所有素材通用：点选+拖动+Transformer 变换（文字只是其中一种图层素材）
+                        const mv = tool === "move";
+                        const common: any = {
+                          name: `shape-${i}`,
+                          opacity: s.opacity,
+                          draggable: mv,
+                          scaleX: s.kind !== "line" ? s.scaleX ?? 1 : s.scaleX,
+                          scaleY: s.kind !== "line" ? s.scaleY ?? 1 : s.scaleY,
+                          onMouseDown: mv ? (e: any) => { e.cancelBubble = true; setSelShape({ layer: l.id, index: i }); } : undefined,
+                          onDragStart: mv ? () => { pushUndo(); } : undefined,
+                          onDragEnd: mv ? (e: any) => {
+                            const n = e.target;
+                            setLayers(ls => ls.map(ll => ll.id === l.id
+                              ? { ...ll, shapes: ll.shapes.map((ss, ii) => ii === i ? { ...ss, x: n.x(), y: n.y() } as ShapeNode : ss) }
+                              : ll));
+                          } : undefined,
+                        };
+                        if (s.kind === "rect") return <KRect key={i} x={s.x} y={s.y} width={s.w} height={s.h} fill={s.fill} cornerRadius={s.cornerRadius} {...common} />;
                         if (s.kind === "text") return (
                           <KText
-                            key={i} name={`text-${i}`}
+                            key={i}
                             x={s.x} y={s.y} text={s.text} fontSize={s.fontSize} fill={s.fill}
-                            stroke={s.stroke} strokeWidth={s.strokeWidth} opacity={s.opacity} fontFamily="serif"
-                            scaleX={s.scaleX ?? 1} scaleY={s.scaleY ?? 1}
+                            stroke={s.stroke} strokeWidth={s.strokeWidth} fontFamily="serif"
                             hitStrokeWidth={24}
-                            draggable={tool === "move"}
-                            onMouseDown={tool === "move" ? (e: any) => { e.cancelBubble = true; setSelText({ layer: l.id, index: i }); } : undefined}
-                            onDblClick={tool === "move" ? (e: any) => { e.cancelBubble = true; editTextAt(l.id, i); } : undefined}
-                            onDragStart={() => { pushUndo(); }}
-                            onDragEnd={(e: any) => {
-                              const n = e.target;
-                              setLayers(ls => ls.map(ll => ll.id === l.id
-                                ? { ...ll, shapes: ll.shapes.map((ss, ii) => ii === i && ss.kind === "text" ? { ...ss, x: n.x(), y: n.y() } : ss) }
-                                : ll));
-                            }}
+                            onDblClick={mv ? (e: any) => { e.cancelBubble = true; editTextAt(l.id, i); } : undefined}
+                            {...common}
                           />
                         );
-                        if (s.kind === "line") return <KLine key={i} points={s.points} stroke={s.stroke} strokeWidth={s.strokeWidth} opacity={s.opacity} tension={s.tension} lineCap="round" lineJoin="round" />;
-                        if (s.kind === "image") return <ImageShape key={i} s={s} forceSize={l.id === "L1" ? docSize : undefined} />;
+                        if (s.kind === "line") return <KLine key={i} x={s.x ?? 0} y={s.y ?? 0} points={s.points} stroke={s.stroke} strokeWidth={s.strokeWidth} tension={s.tension} lineCap="round" lineJoin="round" {...common} />;
+                        if (s.kind === "image") return <ImageShape key={i} s={s} forceSize={l.id === "L1" ? docSize : undefined} extra={common} />;
                         return null;
                       })}
                       {strokes[l.id] && <KLine points={strokes[l.id]} stroke={tool === "eraser" ? "rgba(0,0,0,0.7)" : brushColor} strokeWidth={brushSize} opacity={tool === "eraser" ? 0.7 : brushOpacity} tension={0.5} />}
@@ -1389,7 +1405,7 @@ export default function Workbench({ id, title, cover, docSize: initialDocSize }:
                   ))}
                   {/* 选区遮罩 + 套索预览（顶层，不导出） */}
                   <KLayer ref={overlayRef}>
-                    {selText && tool === "move" && (
+                    {selShape && tool === "move" && (
                       <KTransformer
                         ref={transformerRef}
                         rotateEnabled={false}
@@ -1402,14 +1418,14 @@ export default function Workbench({ id, title, cover, docSize: initialDocSize }:
                         boundBoxFunc={(oldBox, newBox) => (newBox.width < 4 || newBox.height < 4 ? oldBox : newBox)}
                         onTransformStart={() => { pushUndo(); }}
                         onTransformEnd={(e: any) => {
-                          // 自由变换结束：把手柄的 scale 写回 shape（字号不变，形变独立存储）
-                          const sel = selTextRef.current;
+                          // 自由变换结束：把手柄的 scale 写回 shape（通用：字号/宽高不变，形变独立存储）
+                          const sel = selShapeRef.current;
                           const node = e.target;
                           if (!sel || !node) return;
                           const sx = node.scaleX(), sy = node.scaleY();
                           setLayers(ls => ls.map(l => l.id === sel.layer
-                            ? { ...l, shapes: l.shapes.map((ss, ii) => ii === sel.index && ss.kind === "text"
-                                ? { ...ss, x: node.x(), y: node.y(), scaleX: sx, scaleY: sy } : ss) }
+                            ? { ...l, shapes: l.shapes.map((ss, ii) => ii === sel.index
+                                ? { ...ss, x: node.x(), y: node.y(), scaleX: sx, scaleY: sy } as ShapeNode : ss) }
                             : l));
                         }}
                       />

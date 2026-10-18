@@ -134,3 +134,21 @@ send("Input.dispatchKeyEvent", type="keyDown", key="z", code="KeyZ", modifiers=2
 send("Input.dispatchKeyEvent", type="keyUp", key="z", code="KeyZ", modifiers=2)
 time.sleep(0.5)
 print("6. after ctrl+z (expect node back, scale preserved):", js("window.__node()"))
+
+# --- 7. 通用化：矩形素材（油漆桶产物）同样可点选/拖动/缩放 ---
+DOC2SCR = """((dx,dy) => { const st=Konva.stages[0]; const cr=st.container().getBoundingClientRect();
+  return {x: cr.left + dx*st.scaleX(), y: cr.top + dy*st.scaleY()}; })(150, 950)"""
+r100 = js(DOC2SCR)
+p = btn("⬒"); click(p["x"], p["y"]); time.sleep(0.4)  # 油漆桶
+click(r100["x"], r100["y"]); time.sleep(0.8)           # 无选区点击 → 活动层铺一个 rect
+p = btn("✥"); click(p["x"], p["y"]); time.sleep(0.4)   # 移动工具
+click(r100["x"], r100["y"]); time.sleep(0.6)           # 点中 rect → 应选中并挂 Transformer
+rectinfo = js("""(() => { const tr = Konva.stages[0].findOne('Transformer'); if(!tr||!tr.nodes().length) return null;
+  const n = tr.nodes()[0]; return { cls: n.className, name: n.name(), attached: true }; })()""")
+print("7a. rect selected via Transformer:", rectinfo)
+b4 = json.loads(js("(() => { const tr=Konva.stages[0].findOne('Transformer'); const n=tr.nodes()[0]; const cr=Konva.stages[0].container().getBoundingClientRect(); const st=Konva.stages[0]; const px=n.x()+n.width()*n.scaleX()*0.5, py=n.y()+40; return JSON.stringify({x:cr.left+px*st.scaleX(),y:cr.top+py*st.scaleY()}); })()"))
+if b4:
+    before7 = js("(() => { const tr=Konva.stages[0].findOne('Transformer'); const n=tr.nodes()[0]; return {x:+n.x().toFixed(1),y:+n.y().toFixed(1)}; })()")
+    drag(b4["x"], b4["y"], b4["x"] + 60, b4["y"] + 40); time.sleep(0.6)
+    after7 = js("(() => { const tr=Konva.stages[0].findOne('Transformer'); const n=tr.nodes()[0]; return {x:+n.x().toFixed(1),y:+n.y().toFixed(1)}; })()")
+    print("7b. rect drag-move:", before7, "->", after7, "PASS" if after7["x"] > before7["x"] else "FAIL")
