@@ -240,6 +240,10 @@ export default function Workbench({ id, title, cover, docSize: initialDocSize }:
       setZoom(nz);
     };
     const onKey = (e: KeyboardEvent) => {
+      // 焦点在输入框/可编辑区时不抢快捷键：空格、Ctrl+Z/Y 等放行给输入框
+      // （否则打字打不出空格、中文输入法候选词选不了、Ctrl+Z 误撤销画布）
+      const t = e.target as HTMLElement | null;
+      if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable)) return;
       if (e.code === "Space") { e.preventDefault(); setSpaceDown(true); return; }
       if (e.key === "Escape") { clearSel(); lassoPts.current = []; setLassoLive([]); setTextDraft(null); }
       if ((e.ctrlKey || e.metaKey) && (e.key === "z" || e.key === "Z")) { e.preventDefault(); if (e.shiftKey) redo(); else undo(); }
@@ -1321,7 +1325,10 @@ export default function Workbench({ id, title, cover, docSize: initialDocSize }:
                     autoFocus
                     value={textInput}
                     onChange={(e) => setTextInput(e.target.value)}
-                    onKeyDown={(e) => { if (e.key === "Enter") commitText(); }}
+                    onKeyDown={(e) => {
+                      // 输入法组词中（候选词未上屏）不提交，避免半成品拼音被放上画布
+                      if (e.key === "Enter" && !e.nativeEvent.isComposing) commitText();
+                    }}
                     placeholder="输入文字…"
                     className="mb-2 w-full rounded-md border border-border bg-background/60 px-2 py-1.5 text-sm text-foreground outline-none focus:border-foreground/40"
                   />
