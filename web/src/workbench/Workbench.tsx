@@ -1538,16 +1538,42 @@ export default function Workbench({ id, title, cover, docSize: initialDocSize }:
             </div>
             <div className="space-y-1">
               {[...layers].reverse().map(l => (
-                <div key={l.id} onClick={() => setActiveLayer(l.id)}
-                  className={`group flex cursor-pointer items-center gap-2 rounded-lg border px-2 py-2 transition ${activeLayer === l.id ? "border-foreground/30 bg-foreground/10" : "border-transparent hover:bg-foreground/5"}`}>
-                  <button onClick={(e) => { e.stopPropagation(); toggleVis(l.id); }}
-                    className="text-xs text-foreground/50 hover:text-foreground">{l.visible ? "◉" : "◎"}</button>
-                  <span className="flex-1 truncate text-xs text-foreground/80">{l.name}</span>
-                  <div className="hidden gap-0.5 group-hover:block">
-                    <button title="上移一层" onClick={(e) => { e.stopPropagation(); moveLayer(l.id, 1); }} className="px-1 text-[10px] text-foreground/40 hover:text-foreground">↑</button>
-                    <button title="下移一层" onClick={(e) => { e.stopPropagation(); moveLayer(l.id, -1); }} className="px-1 text-[10px] text-foreground/40 hover:text-foreground">↓</button>
-                    <button title="删除图层" onClick={(e) => { e.stopPropagation(); deleteLayer(l.id); }} className="px-1 text-[10px] text-foreground/40 hover:text-red-400">✕</button>
+                <div key={l.id}>
+                  <div onClick={() => setActiveLayer(l.id)}
+                    className={`group flex cursor-pointer items-center gap-2 rounded-lg border px-2 py-2 transition ${activeLayer === l.id ? "border-foreground/30 bg-foreground/10" : "border-transparent hover:bg-foreground/5"}`}>
+                    <button onClick={(e) => { e.stopPropagation(); toggleVis(l.id); }}
+                      className="text-xs text-foreground/50 hover:text-foreground">{l.visible ? "◉" : "◎"}</button>
+                    <span className="flex-1 truncate text-xs text-foreground/80">{l.name}</span>
+                    <div className="hidden gap-0.5 group-hover:block">
+                      <button title="上移一层" onClick={(e) => { e.stopPropagation(); moveLayer(l.id, 1); }} className="px-1 text-[10px] text-foreground/40 hover:text-foreground">↑</button>
+                      <button title="下移一层" onClick={(e) => { e.stopPropagation(); moveLayer(l.id, -1); }} className="px-1 text-[10px] text-foreground/40 hover:text-foreground">↓</button>
+                      <button title="删除图层" onClick={(e) => { e.stopPropagation(); deleteLayer(l.id); }} className="px-1 text-[10px] text-foreground/40 hover:text-red-400">✕</button>
+                    </div>
                   </div>
+                  {/* 图层内素材子行（仿 PS 智能对象展开）：文字/图片/形状/线条各自可点选、删除 */}
+                  {l.shapes.length > 0 && (
+                    <div className="ml-4 mt-0.5 space-y-0.5 border-l border-border/60 pl-2">
+                      {[...l.shapes].map((s, i) => ({ s, i })).reverse().map(({ s, i }) => {
+                        const sel = selShape && selShape.layer === l.id && selShape.index === i;
+                        const meta = s.kind === "text" ? { icon: "T", name: s.text.slice(0, 12) || "文字" }
+                          : s.kind === "image" ? { icon: "▨", name: "图片" }
+                          : s.kind === "rect" ? { icon: "▭", name: "形状" }
+                          : { icon: "〰", name: "线条" };
+                        return (
+                          <div key={i}
+                            onClick={() => { setActiveLayer(l.id); setTool("move"); setSelShape({ layer: l.id, index: i }); }}
+                            onDoubleClick={() => { if (s.kind === "text") { setSelShape(null); editTextAt(l.id, i); } }}
+                            title={s.kind === "text" ? "双击重编辑文字" : "点选后可在画布上变换"}
+                            className={`group flex cursor-pointer items-center gap-1.5 rounded px-1.5 py-1 text-[11px] transition ${sel ? "bg-foreground/15 text-foreground" : "text-foreground/55 hover:bg-foreground/5"}`}>
+                            <span className="w-3 shrink-0 text-center text-[10px] text-foreground/40">{meta.icon}</span>
+                            <span className="flex-1 truncate">{meta.name}</span>
+                            <button title="删除素材" onClick={(e) => { e.stopPropagation(); pushUndo(); setLayers(ls => ls.map(ll => ll.id === l.id ? { ...ll, shapes: ll.shapes.filter((_, ii) => ii !== i) } : ll)); if (sel) setSelShape(null); }}
+                              className="hidden text-[10px] text-foreground/40 hover:text-red-400 group-hover:block">✕</button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
