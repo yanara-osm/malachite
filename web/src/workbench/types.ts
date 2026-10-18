@@ -2,7 +2,7 @@ export type ShapeNode =
   | { kind: "rect"; x: number; y: number; w: number; h: number; fill: string; opacity: number; cornerRadius: number }
   | { kind: "line"; points: number[]; stroke: string; strokeWidth: number; opacity: number; tension: number; composite: string }
   | { kind: "image"; x: number; y: number; w: number; h: number; src: string; opacity: number }
-  | { kind: "text"; x: number; y: number; text: string; fontSize: number; fill: string; opacity: number; stroke?: string; strokeWidth?: number };
+  | { kind: "text"; x: number; y: number; text: string; fontSize: number; fill: string; opacity: number; stroke?: string; strokeWidth?: number; scaleX?: number; scaleY?: number };
 
 export interface Layer {
   id: string;

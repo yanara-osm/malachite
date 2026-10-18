@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Stage, Layer as KLayer, Rect as KRect, Line as KLine, Image as KImage, Text as KText, Circle as KCircle, Ellipse as KEllipse } from "react-konva";
+import { Stage, Layer as KLayer, Rect as KRect, Line as KLine, Image as KImage, Text as KText, Circle as KCircle, Ellipse as KEllipse, Transformer as KTransformer } from "react-konva";
 import Konva from "konva";
 import dynamic from "next/dynamic";
 import Link from "next/link";
@@ -164,11 +164,16 @@ export default function Workbench({ id, title, cover, docSize: initialDocSize }:
   const [aiBusy, setAiBusy] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
   const [mattingError, setMattingError] = useState<string | null>(null);
-  // 文字工具：点击画布 → 弹输入浮层
-  const [textDraft, setTextDraft] = useState<{ x: number; y: number } | null>(null);
+  // 文字工具：点击画布 → 弹输入浮层；edit=正在重编辑已有文字（保留位置/变换）
+  const [textDraft, setTextDraft] = useState<{ x: number; y: number; edit?: { layer: string; index: number } } | null>(null);
   const [textInput, setTextInput] = useState("");
   const [textFontSize, setTextFontSize] = useState(48);
   const [textColor, setTextColor] = useState("#ffffff");
+  // 选中的画布文字（move 工具下点选）→ Transformer 自由变换
+  const [selText, setSelText] = useState<{ layer: string; index: number } | null>(null);
+  const selTextRef = useRef(selText);
+  selTextRef.current = selText;
+  const transformerRef = useRef<any>(null);
   const [wandTol, setWandTol] = useState(32);
   const [wandClicks, setWandClicks] = useState(0);
   const [lassoLive, setLassoLive] = useState<{ x: number; y: number }[]>([]);
@@ -245,7 +250,8 @@ export default function Workbench({ id, title, cover, docSize: initialDocSize }:
       const t = e.target as HTMLElement | null;
       if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable)) return;
       if (e.code === "Space") { e.preventDefault(); setSpaceDown(true); return; }
-      if (e.key === "Escape") { clearSel(); lassoPts.current = []; setLassoLive([]); setTextDraft(null); }
+      if (e.key === "Escape") { clearSel(); lassoPts.current = []; setLassoLive([]); setTextDraft(null); setSelText(null); }
+      if ((e.key === "Delete" || e.key === "Backspace") && selTextRef.current) { e.preventDefault(); deleteSelText(); }
       if ((e.ctrlKey || e.metaKey) && (e.key === "z" || e.key === "Z")) { e.preventDefault(); if (e.shiftKey) redo(); else undo(); }
       else if ((e.ctrlKey || e.metaKey) && (e.key === "y" || e.key === "Y")) { e.preventDefault(); redo(); }
     };
@@ -345,18 +351,93 @@ export default function Workbench({ id, title, cover, docSize: initialDocSize }:
     })();
   };
 
-  // 放置文字（从输入浮层提交）
-  const commitText = () => {
+  // 放置文字（从输入浮层提交）：新建 或 原位重编辑（textDraft.edit）
+  const commitText = async () => {
     if (!textDraft) return;
     const content = textInput.trim();
     if (!content) { setTextDraft(null); return; }
+    // 用户没手动改色时，等智能对比色采样结果落定（防异步竞态拿到旧色）
+    let fill = textColor;
+    if (!colorTouched.current && autoContrast.current) {
+      try { fill = await autoContrast.current.p; } catch { /* 用当前色 */ }
+    }
     pushUndo();
-    setLayers(ls => ls.map(l => l.id === activeLayer
-      ? { ...l, shapes: [{ kind: "text", x: textDraft.x, y: textDraft.y, text: content, fontSize: textFontSize, fill: textColor, opacity: 1 }, ...l.shapes] }
-      : l));
+    if (textDraft.edit) {
+      // 重编辑：保留原位置与变换，只换文字/颜色/字号
+      const { layer: lid, index } = textDraft.edit;
+      setLayers(ls => ls.map(l => l.id === lid
+        ? { ...l, shapes: l.shapes.map((s, i) => i === index && s.kind === "text"
+            ? { ...s, text: content, fontSize: textFontSize, fill: fill } : s) }
+        : l));
+    } else {
+      // 追加到 shapes 末尾 = Konva 绘制顺序最上层（prepend 会被底图/白背景盖住看不见！）
+      const idx = activeShapes.length;
+      setLayers(ls => ls.map(l => l.id === activeLayer
+        ? { ...l, shapes: [...l.shapes, { kind: "text", x: textDraft.x, y: textDraft.y, text: content, fontSize: textFontSize, fill: fill, opacity: 1 }] }
+        : l));
+      setSelText({ layer: activeLayer, index: idx }); // 新文字置顶并立即选中，直接可变换
+    }
     setTextDraft(null);
     setTool("move"); // 放完切回移动工具，避免误触
   };
+
+  // 智能对比色：采样落点周围画布像素的平均亮度，深底→白字，浅底→黑字
+  const contrastColorAt = async (x: number, y: number): Promise<string> => {
+    try {
+      const idata = await stageToImageData();
+      if (!idata) return textColor;
+      const R = 24; // 采样半径（文档像素）
+      let r = 0, g = 0, b = 0, n = 0;
+      const x0 = Math.max(0, Math.round(x - R)), x1 = Math.min(idata.width - 1, Math.round(x + R));
+      const y0 = Math.max(0, Math.round(y - R)), y1 = Math.min(idata.height - 1, Math.round(y + R));
+      for (let yy = y0; yy <= y1; yy += 2) for (let xx = x0; xx <= x1; xx += 2) {
+        const i = (yy * idata.width + xx) * 4;
+        const a = idata.data[i + 3];
+        r += idata.data[i] * a; g += idata.data[i + 1] * a; b += idata.data[i + 2] * a; n += a;
+      }
+      if (!n) return "#1c1a17"; // 全透明（空白画布按白底看）→ 黑字
+      const lum = 0.2126 * (r / n) + 0.7152 * (g / n) + 0.0722 * (b / n);
+      return lum > 140 ? "#1c1a17" : "#ffffff";
+    } catch { return textColor; }
+  };
+  // 智能色异步结果 + 用户是否手动改过色：commitText 时据此定最终色（防采样未回的竞态）
+  const autoContrast = useRef<{ p: Promise<string> } | null>(null);
+  const colorTouched = useRef(false);
+
+  // 双击重编辑已有文字：浮层回填原文/颜色/字号
+  const editTextAt = (layerId: string, index: number) => {
+    const s = layers.find(l => l.id === layerId)?.shapes[index];
+    if (!s || s.kind !== "text") return;
+    setSelText(null);
+    setTextInput(s.text);
+    setTextFontSize(s.fontSize);
+    setTextColor(s.fill);
+    colorTouched.current = true; // 重编辑沿用原色，不再自动对比
+    autoContrast.current = null;
+    setTextDraft({ x: s.x, y: s.y, edit: { layer: layerId, index } });
+    setTool("text");
+  };
+
+  // 删除选中的文字（用 ref 读选中态，供 keydown 闭包安全调用）
+  const deleteSelText = () => {
+    const sel = selTextRef.current;
+    if (!sel) return;
+    pushUndo();
+    setLayers(ls => ls.map(l => l.id === sel.layer
+      ? { ...l, shapes: l.shapes.filter((_, i) => i !== sel.index) }
+      : l));
+    setSelText(null);
+  };
+
+  // 选中文字时：把 Transformer 挂到对应 Konva 节点上（经 layerRefs 找节点）
+  useEffect(() => {
+    const tr = transformerRef.current;
+    if (!tr) return;
+    if (!selText) { tr.nodes([]); tr.getLayer()?.batchDraw(); return; }
+    const node = layerRefs.current[selText.layer]?.findOne(`.text-${selText.index}`);
+    tr.nodes(node ? [node] : []);
+    tr.getLayer()?.batchDraw();
+  }, [selText, layers, zoom]);
 
   // 撤销：填充/清除前把 layers 快照压栈
   const pushUndo = useCallback(() => {
@@ -787,9 +868,11 @@ export default function Workbench({ id, title, cover, docSize: initialDocSize }:
       if (selection) { applySelection(fillColor); }
       else { pushUndo(); setLayers(ls => ls.map(l => l.id === activeLayer ? { ...l, shapes: [{ kind: "rect", x: 0, y: 0, w: docSize.w, h: docSize.h, fill: fillColor, opacity: 0.35, cornerRadius: 0 }, ...l.shapes] } : l)); }
     } else if (tool === "text") {
-      // 点击画布 → 打开文字输入浮层（在定位处放置）
+      // 点击画布 → 打开文字输入浮层（在定位处放置）；默认色按落点底色智能取对比色
       setTextInput("");
       setTextDraft({ x: Math.round(p.x), y: Math.round(p.y) });
+      colorTouched.current = false;
+      autoContrast.current = { p: contrastColorAt(p.x, p.y).then(c => { setTextColor(c); return c; }) };
     }
   };
 
@@ -1264,7 +1347,25 @@ export default function Workbench({ id, title, cover, docSize: initialDocSize }:
                       ref={(ref) => { if (ref) layerRefs.current[l.id] = ref; else delete layerRefs.current[l.id]; }}>
                       {l.shapes.map((s, i) => {
                         if (s.kind === "rect") return <KRect key={i} x={s.x} y={s.y} width={s.w} height={s.h} fill={s.fill} opacity={s.opacity} cornerRadius={s.cornerRadius} />;
-                        if (s.kind === "text") return <KText key={i} x={s.x} y={s.y} text={s.text} fontSize={s.fontSize} fill={s.fill} stroke={s.stroke} strokeWidth={s.strokeWidth} opacity={s.opacity} fontFamily="serif" />;
+                        if (s.kind === "text") return (
+                          <KText
+                            key={i} name={`text-${i}`}
+                            x={s.x} y={s.y} text={s.text} fontSize={s.fontSize} fill={s.fill}
+                            stroke={s.stroke} strokeWidth={s.strokeWidth} opacity={s.opacity} fontFamily="serif"
+                            scaleX={s.scaleX ?? 1} scaleY={s.scaleY ?? 1}
+                            hitStrokeWidth={24}
+                            draggable={tool === "move"}
+                            onMouseDown={tool === "move" ? (e: any) => { e.cancelBubble = true; setSelText({ layer: l.id, index: i }); } : undefined}
+                            onDblClick={tool === "move" ? (e: any) => { e.cancelBubble = true; editTextAt(l.id, i); } : undefined}
+                            onDragStart={() => { pushUndo(); }}
+                            onDragEnd={(e: any) => {
+                              const n = e.target;
+                              setLayers(ls => ls.map(ll => ll.id === l.id
+                                ? { ...ll, shapes: ll.shapes.map((ss, ii) => ii === i && ss.kind === "text" ? { ...ss, x: n.x(), y: n.y() } : ss) }
+                                : ll));
+                            }}
+                          />
+                        );
                         if (s.kind === "line") return <KLine key={i} points={s.points} stroke={s.stroke} strokeWidth={s.strokeWidth} opacity={s.opacity} tension={s.tension} lineCap="round" lineJoin="round" />;
                         if (s.kind === "image") return <ImageShape key={i} s={s} forceSize={l.id === "L1" ? docSize : undefined} />;
                         return null;
@@ -1274,6 +1375,31 @@ export default function Workbench({ id, title, cover, docSize: initialDocSize }:
                   ))}
                   {/* 选区遮罩 + 套索预览（顶层，不导出） */}
                   <KLayer ref={overlayRef}>
+                    {selText && tool === "move" && (
+                      <KTransformer
+                        ref={transformerRef}
+                        rotateEnabled={false}
+                        keepRatio={false}
+                        ignoreStroke
+                        anchorSize={7}
+                        borderStroke="#3c9be8"
+                        anchorStroke="#3c9be8"
+                        anchorFill="#fff"
+                        boundBoxFunc={(oldBox, newBox) => (newBox.width < 4 || newBox.height < 4 ? oldBox : newBox)}
+                        onTransformStart={() => { pushUndo(); }}
+                        onTransformEnd={(e: any) => {
+                          // 自由变换结束：把手柄的 scale 写回 shape（字号不变，形变独立存储）
+                          const sel = selTextRef.current;
+                          const node = e.target;
+                          if (!sel || !node) return;
+                          const sx = node.scaleX(), sy = node.scaleY();
+                          setLayers(ls => ls.map(l => l.id === sel.layer
+                            ? { ...l, shapes: l.shapes.map((ss, ii) => ii === sel.index && ss.kind === "text"
+                                ? { ...ss, x: node.x(), y: node.y(), scaleX: sx, scaleY: sy } : ss) }
+                            : l));
+                        }}
+                      />
+                    )}
                     {selCanvas && <KImage image={selCanvas} x={0} y={0} width={docSize.w} height={docSize.h} opacity={0.85} listening={false} />}
                     {/* SAM mask 预览 + 点标记（青色=前景点，红=背景点） */}
                     {tool === "sam" && samOverlay && samBaseRef.current && (
@@ -1335,7 +1461,7 @@ export default function Workbench({ id, title, cover, docSize: initialDocSize }:
                   <div className="flex items-center gap-2">
                     <label className="flex items-center gap-1 text-[11px] text-foreground/60">
                       色
-                      <ColorWheelPicker value={textColor} onChange={setTextColor} />
+                      <ColorWheelPicker value={textColor} onChange={c => { colorTouched.current = true; setTextColor(c); }} />
                     </label>
                     <label className="flex flex-1 items-center gap-1 text-[11px] text-foreground/60">
                       字号
