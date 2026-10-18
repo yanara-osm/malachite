@@ -26,12 +26,12 @@ def click(x, y, cc=1):
         send("Input.dispatchMouseEvent", type=t, x=float(x), y=float(y), button="left",
              clickCount=cc, buttons=1 if t == "mousePressed" else 0)
 
-def drag(x0, y0, x1, y1, steps=12):
-    send("Input.dispatchMouseEvent", type="mousePressed", x=float(x0), y=float(y0), button="left", clickCount=1, buttons=1)
+def drag(x0, y0, x1, y1, steps=12, mods=0):
+    send("Input.dispatchMouseEvent", type="mousePressed", x=float(x0), y=float(y0), button="left", clickCount=1, buttons=1, modifiers=mods)
     for i in range(1, steps + 1):
         f = i / steps
-        send("Input.dispatchMouseEvent", type="mouseMoved", x=float(x0 + (x1 - x0) * f), y=float(y0 + (y1 - y0) * f), button="left", buttons=1)
-    send("Input.dispatchMouseEvent", type="mouseReleased", x=float(x1), y=float(y1), button="left", clickCount=1, buttons=0)
+        send("Input.dispatchMouseEvent", type="mouseMoved", x=float(x0 + (x1 - x0) * f), y=float(y0 + (y1 - y0) * f), button="left", buttons=1, modifiers=mods)
+    send("Input.dispatchMouseEvent", type="mouseReleased", x=float(x1), y=float(y1), button="left", clickCount=1, buttons=0, modifiers=mods)
 
 def btn(label):
     v = js("(() => { const b=[...document.querySelectorAll('button')].find(b=>b.textContent.trim()=== %s); if(!b)return null; const r=b.getBoundingClientRect(); return JSON.stringify({x:r.x+r.width/2,y:r.y+r.height/2}); })()" % json.dumps(label))
@@ -110,8 +110,18 @@ if a:
     saved = js("""(() => { const id=new URLSearchParams(location.search).get('id');
       const st=JSON.parse(localStorage.getItem('malachite:project:'+id)); const t=st.layers.flatMap(l=>l.shapes).find(s=>s.kind==='text');
       return t ? JSON.stringify({sx:t.scaleX,sy:t.scaleY,x:t.x,y:t.y}) : 'NO_TEXT'; })()""")
-    print("4. anchor scale live:", n3)
+    ratio = (n3["sx"] / n3["sy"]) if n3 and n3["sy"] else None
+    print("4. anchor scale live (keepRatio default ON, expect sx==sy):", n3, "ratio=", ratio)
     print("   persisted in save:", saved)
+    # 关闭等比例开关 -> 拉手柄自由拉伸 sx!=sy
+    tog = js("""(() => { const lb=[...document.querySelectorAll('label')].find(l=>l.textContent.includes('等比例')); const cb=lb&&lb.querySelector('input[type=checkbox]'); if(!cb)return null; cb.click(); return 'toggled_off:'+(!cb.checked); })()""")
+    print("   toggle keepRatio off:", tog)
+    time.sleep(0.3)
+    a2 = js("window.__trAnchorBR()")
+    drag(a2["x"], a2["y"], a2["x"] + 60, a2["y"] + 120)
+    time.sleep(0.8)
+    n4 = js("window.__node()")
+    print("   toggle OFF drag (expect sx!=sy):", n4)
 else:
     print("4. transformer NOT attached: FAIL")
 

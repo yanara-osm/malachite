@@ -173,6 +173,8 @@ export default function Workbench({ id, title, cover, docSize: initialDocSize }:
   const [selText, setSelText] = useState<{ layer: string; index: number } | null>(null);
   const selTextRef = useRef(selText);
   selTextRef.current = selText;
+  // 等比例变换开关（仿 PS：默认等比；Konva Transformer 原生支持拖动中按 Shift 临时反转）
+  const [keepRatio, setKeepRatio] = useState(true);
   const transformerRef = useRef<any>(null);
   const [wandTol, setWandTol] = useState(32);
   const [wandClicks, setWandClicks] = useState(0);
@@ -1276,6 +1278,18 @@ export default function Workbench({ id, title, cover, docSize: initialDocSize }:
               </label>
             )}
           </>
+        ) : tool === "move" && selText ? (
+          <>
+            <span className="text-foreground/50">变换文字</span>
+            <span className="h-4 w-px bg-border" />
+            <label className="flex cursor-pointer items-center gap-1.5 text-foreground/60" title="勾选后拉手柄保持长宽比（等比缩放）；取消勾选可单轴自由拉伸">
+              <input type="checkbox" checked={keepRatio} onChange={e => setKeepRatio(e.target.checked)} className="h-3 w-3 accent-foreground/60" />
+              <span>等比例</span>
+            </label>
+            <span className="text-[10px] text-foreground/30">{keepRatio ? "拉角等比缩放" : "拉边单轴拉伸"}</span>
+            <span className="h-4 w-px bg-border" />
+            <button onClick={deleteSelText} className="h-6 rounded-md border border-border px-2 text-foreground/60 transition hover:text-foreground">删除 (Del)</button>
+          </>
         ) : (
           <span className="text-[11px] text-foreground/30">{TOOLS.find(t => t.id === tool)?.label ?? ""}</span>
         )}
@@ -1379,7 +1393,7 @@ export default function Workbench({ id, title, cover, docSize: initialDocSize }:
                       <KTransformer
                         ref={transformerRef}
                         rotateEnabled={false}
-                        keepRatio={false}
+                        keepRatio={keepRatio}
                         ignoreStroke
                         anchorSize={7}
                         borderStroke="#3c9be8"
