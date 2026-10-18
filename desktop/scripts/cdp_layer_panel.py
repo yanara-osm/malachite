@@ -65,3 +65,16 @@ deljs = """(() => { const rows=[...document.querySelectorAll('div[title]')].filt
 print("3. sub-row delete:", js(deljs)); time.sleep(0.8)
 gone = js("""(() => { const ns=Konva.stages[0].find('Text'); return ns.filter(n=>n.text()==='图层文字测试').length; })()""")
 print("   text nodes remaining (expect 0):", gone)
+
+# 4) 文字图层待遇：放置后图层区出现「文字 …」图层行，悬停✕整层删除
+p = btn("T"); click(p["x"], p["y"]); time.sleep(0.4)
+click(stg["x"], stg["y"]); time.sleep(1.0)
+js("document.querySelector('input[placeholder=\"输入文字…\"]').focus()")
+send("Input.insertText", text="独立图层验证"); time.sleep(0.3)
+p = btn("放置"); click(p["x"], p["y"]); time.sleep(1)
+lrow = js("""(() => { const rows=[...document.querySelectorAll('div.group')].filter(d=>d.textContent.indexOf('文字 独立图层验证')>=0 && d.querySelector('button[title=\"删除图层\"]')); if(!rows.length)return null; const r=rows[0]; const b=r.getBoundingClientRect(); return JSON.stringify({found:true,y:b.y}); })()""")
+print("4. text-as-layer row in panel:", lrow)
+dell = js("""(() => { const rows=[...document.querySelectorAll('div.group')].filter(d=>d.textContent.indexOf('文字 独立图层验证')>=0); if(!rows.length)return 'norow'; const b=rows[0].querySelector('button[title=\"删除图层\"]'); b.click(); return 'clicked'; })()""")
+time.sleep(0.8)
+gone2 = js("""(() => { const ns=Konva.stages[0].find('Text'); return ns.filter(n=>n.text()==='独立图层验证').length; })()""")
+print("   delete whole layer:", dell, "→ text nodes remaining (expect 0):", gone2)

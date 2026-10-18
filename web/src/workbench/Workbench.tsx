@@ -372,12 +372,13 @@ export default function Workbench({ id, title, cover, docSize: initialDocSize }:
             ? { ...s, text: content, fontSize: textFontSize, fill: fill } : s) }
         : l));
     } else {
-      // 追加到 shapes 末尾 = Konva 绘制顺序最上层（prepend 会被底图/白背景盖住看不见！）
-      const idx = activeShapes.length;
-      setLayers(ls => ls.map(l => l.id === activeLayer
-        ? { ...l, shapes: [...l.shapes, { kind: "text", x: textDraft.x, y: textDraft.y, text: content, fontSize: textFontSize, fill: fill, opacity: 1 }] }
-        : l));
-      setSelShape({ layer: activeLayer, index: idx }); // 新文字置顶并立即选中，直接可变换
+      // 文字 = 独立图层（PS 同款待遇：面板里可上下移/删除/显隐/透明度/混合），追加到末尾 = 最上层
+      const lid = "text_" + Date.now();
+      const nl: Layer = { id: lid, name: `文字 ${content.slice(0, 8)}`, visible: true, opacity: 1,
+        shapes: [{ kind: "text", x: textDraft.x, y: textDraft.y, text: content, fontSize: textFontSize, fill: fill, opacity: 1 }] };
+      setLayers(ls => [...ls, nl]);
+      setActiveLayer(lid);
+      setSelShape({ layer: lid, index: 0 }); // 新文字置顶并立即选中，直接可变换
     }
     setTextDraft(null);
     setTool("move"); // 放完切回移动工具，避免误触
