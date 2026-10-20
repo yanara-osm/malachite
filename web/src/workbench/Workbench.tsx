@@ -1003,7 +1003,10 @@ export default function Workbench({ id, title, cover, docSize: initialDocSize }:
       if (!st) return;
       const ov = overlayRef.current;
       if (ov) { ov.visible(false); ov.batchDraw(); }
-      const dataUrl = st.toDataURL({ pixelRatio: 1, mimeType: fmt === "jpg" ? "image/jpeg" : fmt === "webp" ? "image/webp" : "image/png" });
+      // Stage 位图本身带 zoom 缩放（scaleX=视图缩放），pixelRatio 必须除回去才是文档 1:1 尺寸，
+      // 否则缩小时导出图=文档×zoom 贴在角上（人脸缩成左上角一小块）
+      const pr = 1 / (st.scaleX() || 1);
+      const dataUrl = st.toDataURL({ pixelRatio: pr, mimeType: fmt === "jpg" ? "image/jpeg" : fmt === "webp" ? "image/webp" : "image/png" });
       if (ov) { ov.visible(true); ov.batchDraw(); }
       const full = document.createElement("canvas");
       full.width = docSize.w; full.height = docSize.h;
@@ -1012,7 +1015,7 @@ export default function Workbench({ id, title, cover, docSize: initialDocSize }:
       if (fmt === "jpg") { ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, full.width, full.height); }
       await new Promise<void>((res, rej) => {
         const img = new Image();
-        img.onload = () => { ctx.drawImage(img, 0, 0); res(); };
+        img.onload = () => { ctx.drawImage(img, 0, 0, full.width, full.height); res(); };
         img.onerror = rej;
         img.src = dataUrl;
       });
@@ -1055,7 +1058,8 @@ export default function Workbench({ id, title, cover, docSize: initialDocSize }:
       const snapshotDataUrl = () => {
         const ov = overlayRef.current;
         if (ov) { ov.visible(false); ov.batchDraw(); }
-        const d = st.toDataURL({ pixelRatio: 1, mimeType: "image/png" });
+        // 同 exportImage：pixelRatio 除回视图缩放，快照才是文档 1:1（选区裁剪按文档坐标取数）
+        const d = st.toDataURL({ pixelRatio: 1 / (st.scaleX() || 1), mimeType: "image/png" });
         if (ov) { ov.visible(true); ov.batchDraw(); }
         return d;
       };
