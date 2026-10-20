@@ -798,8 +798,12 @@ export default function Workbench({ id, title, cover, docSize: initialDocSize }:
     if (!f) return;
     const st = stageRef.current;
     if (!st) return;
-    // drop 点 → 文档坐标
-    const pos = st.getRelativePosition({ x: e.clientX, y: e.clientY });
+    // drop 点 → 文档坐标（Konva 没有 getRelativePosition：视口坐标减 stage 偏移再除缩放）
+    const rect = st.container().getBoundingClientRect();
+    const pos = {
+      x: (e.clientX - rect.left - st.x()) / st.scaleX(),
+      y: (e.clientY - rect.top - st.y()) / st.scaleY(),
+    };
     // 读图尺寸
     const dataUrl = await new Promise<string>(r => {
       const fr = new FileReader();
