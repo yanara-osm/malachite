@@ -353,6 +353,52 @@ export default function Workbench({ id, title, cover, docSize: initialDocSize }:
     })();
   };
 
+  // 选区裁剪成新文件：按选区遮罩的包围盒从 1:1 合成图上裁下，直接下载独立图片文件（项目不动）
+  const cropSelectionToFile = () => {
+    if (!selection) return;
+    (async () => {
+      const st = stageRef.current;
+      if (!st) return;
+      const ov = overlayRef.current;
+      if (ov) { ov.visible(false); ov.batchDraw(); }
+      const dataUrl = st.toDataURL({ pixelRatio: 1 / (st.scaleX() || 1), mimeType: "image/png" });
+      if (ov) { ov.visible(true); ov.batchDraw(); }
+      const img = await loadImg(dataUrl);
+      // 选区遮罩包围盒
+      const sw = selection.w, sh = selection.h;
+      let x0 = sw, y0 = sh, x1 = -1, y1 = -1;
+      for (let y = 0; y < sh; y++) {
+        const row = y * sw;
+        for (let x = 0; x < sw; x++) {
+          if (selection.data[row + x]) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
+        }
+      }
+      if (x1 < 0) return;
+      const cw = x1 - x0 + 1, ch = y1 - y0 + 1;
+      const c = document.createElement("canvas");
+      c.width = cw; c.height = ch;
+      const ctx = c.getContext("2d")!;
+      // 只保留选区内像素（套索/魔棒等非矩形选区外圈透明）
+      const selCanvas = document.createElement("canvas");
+      selCanvas.width = sw; selCanvas.height = sh;
+      const sctx = selCanvas.getContext("2d")!;
+      sctx.drawImage(img, 0, 0, sw, sh);
+      const idata = sctx.getImageData(0, 0, sw, sh);
+      const ext = extractSelection(idata, selection);
+      const full = document.createElement("canvas");
+      full.width = sw; full.height = sh;
+      full.getContext("2d")!.putImageData(ext, 0, 0);
+      ctx.drawImage(full, x0, y0, cw, ch, 0, 0, cw, ch);
+      c.toBlob(blob => {
+        if (!blob) return;
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url; a.download = `${id}_裁剪_${cw}x${ch}.png`; a.click();
+        URL.revokeObjectURL(url);
+      }, "image/png");
+    })().catch(() => alert("裁剪失败"));
+  };
+
   // 放置文字（从输入浮层提交）：新建 或 原位重编辑（textDraft.edit）
   const commitText = async () => {
     if (!textDraft) return;
@@ -1231,6 +1277,7 @@ export default function Workbench({ id, title, cover, docSize: initialDocSize }:
             <button onClick={() => applySelection(fillColor)} title="油漆桶：把选区填成桶色" className="h-6 rounded-md border border-border px-2 text-foreground/70 transition hover:bg-secondary hover:text-foreground">油漆桶</button>
             <button onClick={() => applySelection(null)} className="h-6 rounded-md border border-border px-2 text-foreground/70 transition hover:bg-secondary hover:text-foreground">清除选区</button>
             <button onClick={duplicateSelection} title="选区抠出：选区内像素保留、选区外透明，作为新图层" className="h-6 rounded-md border border-foreground/30 bg-foreground/5 px-2 text-foreground/80 transition hover:bg-foreground/15 hover:text-foreground">抠出新图层</button>
+            <button onClick={cropSelectionToFile} title="裁剪成新文件：把选区范围裁下来直接导出为独立 PNG 下载（项目不动）" className="h-6 rounded-md border border-foreground/30 bg-foreground/5 px-2 text-foreground/80 transition hover:bg-foreground/15 hover:text-foreground">裁成新文件</button>
             <button onClick={clearSel} className="h-6 rounded-md border border-border px-2 text-foreground/50 transition hover:text-foreground">取消选区 (Esc)</button>
           </>
         ) : tool === "sam" ? (
