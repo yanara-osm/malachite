@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { fileToDataUrl, saveDragProject } from "@/lib/projects";
+import { fileToThumb, saveDragProject } from "@/lib/projects";
 
 const SUGGESTIONS = [
   "把这张照片改成水墨风格，保留主体轮廓",
@@ -129,9 +129,11 @@ export default function Home() {
     if (!f || creating) return;
     setCreating(true);
     try {
-      const dataUrl = await fileToDataUrl(f, 1024);
+      const thumb = await fileToThumb(f);
       const id = "d" + Date.now() + Math.random().toString(36).slice(2, 6);
-      saveDragProject({ id, title: f.name.replace(/\.\w+$/, ""), img: dataUrl, time: "刚刚", steps: 1 });
+      const { fileToDataUrl } = await import("@/lib/projects");
+      const fullImg = await fileToDataUrl(f); // 原尺寸，不压缩
+      await saveDragProject({ id, title: f.name.replace(/\.\w+$/, ""), img: thumb, time: "刚刚", steps: 1 }, fullImg);
       router.push(`/project?id=${id}`);
     } finally {
       setCreating(false);

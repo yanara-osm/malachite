@@ -13,7 +13,7 @@ import ColorWheelPicker from "./ColorWheelPicker";
 import ApiAgent, { type ImageSource } from "./ApiAgent";
 import { magicWand, lasso, rectSelection, ellipseSelection, fillSelection, extractSelection, selectionToCanvas, type Selection } from "./selection";
 import { samEmbed, samPredict, samComposite, samSegmentAll, samExtractRegion, samClearCache, type SamPoint, type SamRegion } from "./sam";
-import { loadProjectState, saveProjectState } from "@/lib/autosave";
+import { loadProjectState, saveProjectState, hydrateProjectState } from "@/lib/autosave";
 
 // 注册自定义调色滤镜（Konva.Filters.ColorGrade），模块只加载一次
 if (!(Konva as any).Filters.ColorGrade) {
@@ -154,6 +154,17 @@ export default function Workbench({ id, title, cover, docSize: initialDocSize }:
     }, 600);
     return () => clearTimeout(t);
   }, [layers, docSize, activeLayer, id]);
+
+  // 初始加载：存档里的大图是 "idb:" 引用 → 异步水合回真实 dataURL 再渲染
+  const hydratedRef = useRef(false);
+  useEffect(() => {
+    const saved = loadProjectState(id);
+    if (!saved || hydratedRef.current) return;
+    if (!JSON.stringify(saved.layers).includes("idb:")) return;
+    let alive = true;
+    hydrateProjectState(saved).then(h => { if (alive) { hydratedRef.current = true; setLayers(h.layers); } });
+    return () => { alive = false; };
+  }, [id]);
 
   const [selection, setSelection] = useState<Selection | null>(null);
   const [selCanvas, setSelCanvas] = useState<HTMLCanvasElement | null>(null);

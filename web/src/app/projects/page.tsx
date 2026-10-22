@@ -3,7 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { getDragProjects, saveDragProject, fileToDataUrl, DragProject } from "@/lib/projects";
+import { getDragProjects, saveDragProject, fileToThumb, fileToDataUrl, DragProject } from "@/lib/projects";
 
 const PROJECTS = [
   { id: "ink", title: "水墨山水海报", time: "2 小时前", steps: 12, img: "/presets/ink.png" },
@@ -28,20 +28,19 @@ export default function ProjectPool() {
     setDragOver(false);
     const files = Array.from(e.dataTransfer.files).filter(f => f.type.startsWith("image/"));
     if (!files.length) return;
-    const added: DragProject[] = [];
     for (const f of files) {
-      const img = await fileToDataUrl(f, 1024);
-      added.push({
-        id: "d" + Date.now() + Math.random().toString(36).slice(2, 6),
+      const id = "d" + Date.now() + Math.random().toString(36).slice(2, 6);
+      const thumb = await fileToThumb(f);
+      const full = await fileToDataUrl(f); // 原尺寸，不压缩
+      await saveDragProject({
+        id,
         title: f.name.replace(/\.\w+$/, ""),
-        img,
+        img: thumb,
         time: "刚刚",
         steps: 1,
-      });
+      }, full);
     }
-    let list: DragProject[] = [];
-    for (const p of added) list = saveDragProject(p);
-    setDragProjects(list);
+    setDragProjects(getDragProjects());
   };
 
   return (

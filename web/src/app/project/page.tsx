@@ -3,7 +3,7 @@
 import { Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import dynamic from "next/dynamic";
-import { findDragProject } from "@/lib/projects";
+import { findDragProject, getProjectFullImage } from "@/lib/projects";
 
 const Workbench = dynamic(() => import("@/workbench/Workbench"), { ssr: false });
 
@@ -30,9 +30,13 @@ function Inner() {
 
   useEffect(() => {
     if (!id.startsWith("d")) return;
-    const p = findDragProject(id);
-    if (p) { setCover(p.img); setTitle(p.title); setDocSize(p.docSize); }
-    setReady(true);
+    (async () => {
+      const p = findDragProject(id);
+      if (p) { setTitle(p.title); setDocSize(p.docSize); }
+      const full = await getProjectFullImage(id);
+      if (full) setCover(full);
+      setReady(true);
+    })();
   }, [id]);
 
   if (!ready) return LOADING;
