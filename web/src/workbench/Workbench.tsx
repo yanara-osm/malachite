@@ -987,7 +987,8 @@ export default function Workbench({ id, title, cover, docSize: initialDocSize }:
       pushUndo();
       const pts = pointRef.current;
       setLayers(ls => ls.map(l => l.id === activeLayer
-        ? { ...l, shapes: [{ kind: "line", points: pts, stroke: tool === "eraser" ? "rgba(0,0,0,0.9)" : "oklch(0.85 0.12 190)", strokeWidth: tool === "eraser" ? 28 : 8, opacity: 1, tension: 0.5, composite: tool === "eraser" ? "destination-out" : "source-over" }, ...l.shapes] }
+        // 笔迹必须追加到数组尾（层内最上层）：橡皮 destination-out 要先有像素才能擦，插到开头会被下方图像重新盖住
+        ? { ...l, shapes: [...l.shapes, { kind: "line", points: pts, stroke: tool === "eraser" ? "rgba(0,0,0,1)" : brushColor, strokeWidth: brushSize, opacity: tool === "eraser" ? 1 : brushOpacity, tension: 0.5, composite: tool === "eraser" ? "destination-out" : "source-over" }] }
         : l));
       setStrokes(s => { const n = { ...s }; delete n[activeLayer]; return n; });
       pointRef.current = [];
@@ -1463,11 +1464,11 @@ export default function Workbench({ id, title, cover, docSize: initialDocSize }:
                             {...common}
                           />
                         );
-                        if (s.kind === "line") return <KLine key={i} x={s.x ?? 0} y={s.y ?? 0} points={s.points} stroke={s.stroke} strokeWidth={s.strokeWidth} tension={s.tension} lineCap="round" lineJoin="round" {...common} />;
+                        if (s.kind === "line") return <KLine key={i} x={s.x ?? 0} y={s.y ?? 0} points={s.points} stroke={s.stroke} strokeWidth={s.strokeWidth} tension={s.tension} lineCap="round" lineJoin="round" globalCompositeOperation={(s.composite as any) ?? "source-over"} {...common} />;
                         if (s.kind === "image") return <ImageShape key={i} s={s} forceSize={l.id === "L1" ? docSize : undefined} extra={common} />;
                         return null;
                       })}
-                      {strokes[l.id] && <KLine points={strokes[l.id]} stroke={tool === "eraser" ? "rgba(0,0,0,0.7)" : brushColor} strokeWidth={brushSize} opacity={tool === "eraser" ? 0.7 : brushOpacity} tension={0.5} />}
+                      {strokes[l.id] && <KLine points={strokes[l.id]} stroke={tool === "eraser" ? "rgba(0,0,0,0.7)" : brushColor} strokeWidth={brushSize} opacity={tool === "eraser" ? 0.7 : brushOpacity} tension={0.5} lineCap="round" lineJoin="round" globalCompositeOperation={tool === "eraser" ? "destination-out" : "source-over"} listening={false} />}
                     </KLayer>
                   ))}
                   {/* 选区遮罩 + 套索预览（顶层，不导出） */}
