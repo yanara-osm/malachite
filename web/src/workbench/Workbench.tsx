@@ -1348,10 +1348,10 @@ export default function Workbench({ id, title, cover, docSize: initialDocSize }:
                 <span className="w-6 text-right tabular-nums text-foreground/50">{wandTol}</span>
               </label>
             )}
-            <label className="flex items-center gap-1 text-foreground/60">
+            <span className="flex items-center gap-1 text-foreground/60">
               <span>桶色</span>
               <ColorWheelPicker value={fillColor} onChange={setFillColor} />
-            </label>
+            </span>
             <button onClick={() => applySelection(fillColor)} title="油漆桶：把选区填成桶色" className="h-6 rounded-md border border-border px-2 text-foreground/70 transition hover:bg-secondary hover:text-foreground">油漆桶</button>
             <button onClick={() => applySelection(null)} className="h-6 rounded-md border border-border px-2 text-foreground/70 transition hover:bg-secondary hover:text-foreground">清除选区</button>
             <button onClick={duplicateSelection} title="选区抠出：选区内像素保留、选区外透明，作为新图层" className="h-6 rounded-md border border-foreground/30 bg-foreground/5 px-2 text-foreground/80 transition hover:bg-foreground/15 hover:text-foreground">抠出新图层</button>
@@ -1399,10 +1399,10 @@ export default function Workbench({ id, title, cover, docSize: initialDocSize }:
             <span className="text-foreground/50">{tool === "brush" ? "画笔" : "橡皮"}</span>
             <span className="h-4 w-px bg-border" />
             {tool === "brush" && (
-              <label className="flex items-center gap-1 text-foreground/60">
+              <span className="flex items-center gap-1 text-foreground/60">
                 <span>颜色</span>
                 <ColorWheelPicker value={brushColor} onChange={setBrushColor} />
-              </label>
+              </span>
             )}
             <label className="flex items-center gap-1.5 text-foreground/60">
               <span>大小</span>
@@ -1429,10 +1429,10 @@ export default function Workbench({ id, title, cover, docSize: initialDocSize }:
           <>
             <span className="text-foreground/50">油漆桶</span>
             <span className="h-4 w-px bg-border" />
-            <label className="flex items-center gap-1.5 text-foreground/60">
+            <span className="flex items-center gap-1.5 text-foreground/60">
               <span>颜色</span>
               <ColorWheelPicker value={fillColor} onChange={setFillColor} />
-            </label>
+            </span>
             <span className="text-foreground/40" title="按住 Alt 在画布上点击，拾取该处颜色">Alt+点击 取色</span>
             <span className="h-4 w-px bg-border" />
             <span className="text-foreground/40">点击画布：有选区填选区，无选区铺满当前图层</span>
@@ -1656,10 +1656,10 @@ export default function Workbench({ id, title, cover, docSize: initialDocSize }:
                     className="mb-2 w-full rounded-md border border-border bg-background/60 px-2 py-1.5 text-sm text-foreground outline-none focus:border-foreground/40"
                   />
                   <div className="flex items-center gap-2">
-                    <label className="flex items-center gap-1 text-[11px] text-foreground/60">
+                    <span className="flex items-center gap-1 text-[11px] text-foreground/60">
                       色
                       <ColorWheelPicker value={textColor} onChange={c => { colorTouched.current = true; setTextColor(c); }} />
-                    </label>
+                    </span>
                     <label className="flex flex-1 items-center gap-1 text-[11px] text-foreground/60">
                       字号
                       <input type="range" min={12} max={200} value={textFontSize} onChange={e => setTextFontSize(+e.target.value)} className="h-1 flex-1 accent-foreground/60" />

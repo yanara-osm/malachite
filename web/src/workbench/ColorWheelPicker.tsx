@@ -59,37 +59,14 @@ export default function ColorWheelPicker({ value, onChange }: { value: string; o
     if (!open) return;
     const onDown = (e: MouseEvent) => {
       if (rootRef.current && !rootRef.current.contains(e.target as Node)) setOpen(false);
-    };
+    }
     document.addEventListener("mousedown", onDown);
     return () => document.removeEventListener("mousedown", onDown);
   }, [open]);
 
   const center = { x: SIZE / 2, y: SIZE / 2 };
 
-  const pickWheel = (clientX: number, clientY: number) => {
-    const rect = rootRef.current!.querySelector("[data-wheel]")!.getBoundingClientRect();
-    const cx = rect.left + rect.width / 2, cy = rect.top + rect.height / 2;
-    const ang = (Math.atan2(clientY - cy, clientX - cx) * 180) / Math.PI;
-    const hue = (ang + 90 + 360) % 360; // conic-gradient 0° 在顶部
-    const [, s, v] = hsv;
-    setHsv([hue, s, v]);
-  };
-
-  const pickSv = (clientX: number, clientY: number) => {
-    const rect = rootRef.current!.querySelector("[data-sv]")!.getBoundingClientRect();
-    const x = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
-    const y = Math.max(0, Math.min(1, (clientY - rect.top) / rect.height));
-    const [h] = hsv;
-    setHsv([h, x, 1 - y]); // 顶部 v=1，底部 v=0
-  };
-
-  const onMove = (e: React.PointerEvent) => {
-    if (!dragging.current) return;
-    if (dragging.current === "wheel") pickWheel(e.clientX, e.clientY);
-    else pickSv(e.clientX, e.clientY);
-  };
-
-  // hsv 变化 → 同步 hex 到外部
+  // hsv 变化 → 同步 hex 到外部（必须在 pick 之前定义）
   const commit = (h: number, s: number, v: number) => {
     const hex = hsvToHex(h, s, v);
     setDraft(hex);
@@ -99,6 +76,37 @@ export default function ColorWheelPicker({ value, onChange }: { value: string; o
   const setHsvAndCommit = (h: number, s: number, v: number) => {
     setHsv([h, s, v]);
     commit(h, s, v);
+  };
+
+  const pickWheel = (clientX: number, clientY: number) => {
+    const rect = rootRef.current!.querySelector("[data-wheel]")!.getBoundingClientRect();
+    const cx = rect.left + rect.width / 2, cy = rect.top + rect.height / 2;
+    const ang = (Math.atan2(clientY - cy, clientX - cx) * 180) / Math.PI;
+    const hue = (ang + 90 + 360) % 360; // conic-gradient 0° 在顶部
+    const [, s, v] = hsv;
+    setHsvAndCommit(hue, s, v);
+  };
+
+  const pickSv = (clientX: number, clientY: number) => {
+    const rect = rootRef.current!.querySelector("[data-sv]")!.getBoundingClientRect();
+    const x = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+    const y = Math.max(0, Math.min(1, (clientY - rect.top) / rect.height));
+    const [h] = hsv;
+    setHsvAndCommit(h, x, 1 - y); // 顶部 v=1，底部 v=0
+  };
+
+  const onMove = (e: React.PointerEvent) => {
+    if (!dragging.current) return;
+    if (dragging.current === "wheel") pickWheel(e.clientX, e.clientY);
+    else pickSv(e.clientX, e.clientY);
+  };
+
+  const startDrag = (kind: "wheel" | "sv") => (e: React.PointerEvent) => {
+    e.stopPropagation(); // SV 方块嵌在色轮内，不拦会冒泡到色轮把类型改成 wheel
+    dragging.current = kind;
+    (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId);
+    if (kind === "wheel") pickWheel(e.clientX, e.clientY);
+    else pickSv(e.clientX, e.clientY);
   };
 
   const [h, s, v] = hsv;
@@ -131,9 +139,10 @@ export default function ColorWheelPicker({ value, onChange }: { value: string; o
             data-wheel
             className="relative cursor-pointer"
             style={{ width: SIZE, height: SIZE, borderRadius: "50%", background: WHEEL_BG }}
-            onPointerDown={(e) => { dragging.current = "wheel"; pickWheel(e.clientX, e.clientY); }}
+            onPointerDown={startDrag("wheel")}
             onPointerMove={onMove}
             onPointerUp={() => { dragging.current = null; }}
+            onPointerCancel={() => { dragging.current = null; }}
           >
             {/* 内圆挖空 = SV 方块 */}
             <div
@@ -144,7 +153,7 @@ export default function ColorWheelPicker({ value, onChange }: { value: string; o
                 width: SIZE - WHEEL_THICK * 2, height: SIZE - WHEEL_THICK * 2,
                 ...svBg,
               }}
-              onPointerDown={(e) => { dragging.current = "sv"; pickSv(e.clientX, e.clientY); }}
+              onPointerDown={startDrag("sv")}
             />
             {/* SV 指示点 */}
             <div className="pointer-events-none absolute h-2.5 w-2.5 rounded-full border-2 border-white shadow"
