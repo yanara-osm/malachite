@@ -126,6 +126,7 @@ export default function Workbench({ id, title, cover, docSize: initialDocSize }:
   // 拖拽新建项目（d 前缀）：文档尺寸 + 底图跟随图片真实长宽比（demo 项目保持 DOC_W/DOC_H）
   useEffect(() => {
     if (!id.startsWith("d")) return;
+    if (!cover) return; // 空白画布（img="")：保持对话框设定的 docSize，勿走图片规范化把尺寸冲掉
     if (loadProjectState(id)) return; // 已有自动保存的进度：跳过重新规范化，避免覆盖扩展后的画布尺寸
     const i = new window.Image();
     i.onload = () => {

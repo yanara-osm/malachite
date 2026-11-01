@@ -34,7 +34,7 @@ function Inner() {
       const p = findDragProject(id);
       if (p) { setTitle(p.title); setDocSize(p.docSize); }
       const full = await getProjectFullImage(id);
-      if (full) setCover(full);
+      setCover(full ?? ""); // 空白画布无全图→空串，勿兜底成水墨 demo 图
       setReady(true);
     })();
   }, [id]);
