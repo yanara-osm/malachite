@@ -170,6 +170,7 @@ export default function Workbench({ id, title, cover, docSize: initialDocSize }:
   const [selection, setSelection] = useState<Selection | null>(null);
   const [selCanvas, setSelCanvas] = useState<HTMLCanvasElement | null>(null);
   const [fillColor, setFillColor] = useState("#3c9be8");
+  useEffect(() => { (window as any).__fillColor = fillColor; }, [fillColor]);
   const [brushColor, setBrushColor] = useState("#1c1a17");
   useEffect(() => { (window as any).__brushColor = brushColor; }, [brushColor]);
   const [brushSize, setBrushSize] = useState(8);
@@ -968,10 +969,14 @@ export default function Workbench({ id, title, cover, docSize: initialDocSize }:
       return;
     }
     const p = toStage(e);
-    // 画笔自带吸管：画笔工具下按住 Alt 点击 = 拾取该点颜色（不切换工具）
-    if (tool === "brush" && e.evt?.altKey) {
+    // 画笔/油漆桶自带吸管：按住 Alt 点击 = 拾取该点颜色（不落笔、不填色、不切换工具）
+    if ((tool === "brush" || tool === "fill") && e.evt?.altKey) {
       e.evt.preventDefault();
-      pickColorAt(p.x, p.y).then(c => { if (c) { setBrushColor(c); colorTouched.current = true; } });
+      pickColorAt(p.x, p.y).then(c => {
+        if (!c) return;
+        if (tool === "fill") setFillColor(c); else setBrushColor(c);
+        colorTouched.current = true;
+      });
       return;
     }
     if (tool === "wand") { onWand(p.x, p.y); return; }
@@ -1420,6 +1425,18 @@ export default function Workbench({ id, title, cover, docSize: initialDocSize }:
               <span className="text-foreground/40" title="按住 Alt 在画布上点击，拾取该处颜色">Alt+点击 取色</span>
             )}
           </>
+        ) : tool === "fill" ? (
+          <>
+            <span className="text-foreground/50">油漆桶</span>
+            <span className="h-4 w-px bg-border" />
+            <label className="flex items-center gap-1.5 text-foreground/60">
+              <span>颜色</span>
+              <ColorWheelPicker value={fillColor} onChange={setFillColor} />
+            </label>
+            <span className="text-foreground/40" title="按住 Alt 在画布上点击，拾取该处颜色">Alt+点击 取色</span>
+            <span className="h-4 w-px bg-border" />
+            <span className="text-foreground/40">点击画布：有选区填选区，无选区铺满当前图层</span>
+          </>
         ) : tool === "move" && selShape ? (
           <>
             <span className="text-foreground/50">变换{(() => {
@@ -1473,7 +1490,7 @@ export default function Workbench({ id, title, cover, docSize: initialDocSize }:
               <Ruler zoom={zoom} origin={originY} length={viewH} dir="v" />
             </div>
             <div ref={vpRef} className="relative min-w-0 flex-1 overflow-hidden"
-              style={{ background: "oklch(0.14 0.005 260)", cursor: spaceDown || tool === "move" ? "grab" : tool === "wand" || tool === "lasso" || tool === "sam" ? "crosshair" : tool === "brush" && (altDown) ? "crosshair" : tool === "brush" || tool === "eraser" ? "none" : "default" }}
+              style={{ background: "oklch(0.14 0.005 260)", cursor: spaceDown || tool === "move" ? "grab" : tool === "wand" || tool === "lasso" || tool === "sam" || tool === "fill" ? "crosshair" : tool === "brush" && (altDown) ? "crosshair" : tool === "brush" || tool === "eraser" ? "none" : "default" }}
               onDragEnter={(e) => { e.preventDefault(); setDragOver(true); }}
               onDragOver={(e) => e.preventDefault()}
               onDragLeave={(e) => { e.preventDefault(); setDragOver(false); }}
