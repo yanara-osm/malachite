@@ -171,6 +171,7 @@ export default function Workbench({ id, title, cover, docSize: initialDocSize }:
   const [fillColor, setFillColor] = useState("#3c9be8");
   const [brushColor, setBrushColor] = useState("#1c1a17");
   const [brushSize, setBrushSize] = useState(8);
+  const [brushFeather, setBrushFeather] = useState(0);
   const [brushOpacity, setBrushOpacity] = useState(1);
   const [aiBusy, setAiBusy] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
@@ -988,7 +989,7 @@ export default function Workbench({ id, title, cover, docSize: initialDocSize }:
       const pts = pointRef.current;
       setLayers(ls => ls.map(l => l.id === activeLayer
         // 笔迹必须追加到数组尾（层内最上层）：橡皮 destination-out 要先有像素才能擦，插到开头会被下方图像重新盖住
-        ? { ...l, shapes: [...l.shapes, { kind: "line", points: pts, stroke: tool === "eraser" ? "rgba(0,0,0,1)" : brushColor, strokeWidth: brushSize, opacity: tool === "eraser" ? 1 : brushOpacity, tension: 0.5, composite: tool === "eraser" ? "destination-out" : "source-over", isStroke: true }] }
+        ? { ...l, shapes: [...l.shapes, { kind: "line", points: pts, stroke: tool === "eraser" ? "rgba(0,0,0,1)" : brushColor, strokeWidth: brushSize, opacity: tool === "eraser" ? 1 : brushOpacity, tension: 0.5, composite: tool === "eraser" ? "destination-out" : "source-over", feather: brushFeather, isStroke: true }] }
         : l));
       setStrokes(s => { const n = { ...s }; delete n[activeLayer]; return n; });
       pointRef.current = [];
@@ -1343,6 +1344,11 @@ export default function Workbench({ id, title, cover, docSize: initialDocSize }:
               <input type="range" min={1} max={120} value={brushSize} onChange={e => setBrushSize(+e.target.value)} className="h-1 w-24 accent-foreground/60" />
               <span className="w-8 text-right tabular-nums text-foreground/50">{brushSize}px</span>
             </label>
+            <label className="flex items-center gap-1.5 text-foreground/60" title="羽化：边缘柔和过渡（软画笔/软橡皮）；0=硬边">
+              <span>羽化</span>
+              <input type="range" min={0} max={60} value={brushFeather} onChange={e => setBrushFeather(+e.target.value)} className="h-1 w-20 accent-foreground/60" />
+              <span className="w-8 text-right tabular-nums text-foreground/50">{brushFeather}px</span>
+            </label>
             {tool === "brush" && (
               <label className="flex items-center gap-1.5 text-foreground/60">
                 <span>不透明度</span>
@@ -1464,11 +1470,12 @@ export default function Workbench({ id, title, cover, docSize: initialDocSize }:
                             {...common}
                           />
                         );
-                        if (s.kind === "line") return <KLine key={i} x={s.x ?? 0} y={s.y ?? 0} points={s.points} stroke={s.stroke} strokeWidth={s.strokeWidth} tension={s.tension} lineCap="round" lineJoin="round" globalCompositeOperation={(s.composite as any) ?? "source-over"} {...common} />;
+                        // 羽化=同色阴影扩散做软边（橡皮 destination-out 下即渐进擦除）
+                        if (s.kind === "line") return <KLine key={i} x={s.x ?? 0} y={s.y ?? 0} points={s.points} stroke={s.stroke} strokeWidth={s.strokeWidth} tension={s.tension} lineCap="round" lineJoin="round" globalCompositeOperation={(s.composite as any) ?? "source-over"} {...(s.feather ? { shadowForStrokeEnabled: true, shadowColor: s.stroke, shadowBlur: s.feather, shadowOffsetX: 0, shadowOffsetY: 0 } : {})} {...common} />;
                         if (s.kind === "image") return <ImageShape key={i} s={s} forceSize={l.id === "L1" ? docSize : undefined} extra={common} />;
                         return null;
                       })}
-                      {strokes[l.id] && <KLine points={strokes[l.id]} stroke={tool === "eraser" ? "rgba(0,0,0,0.7)" : brushColor} strokeWidth={brushSize} opacity={tool === "eraser" ? 0.7 : brushOpacity} tension={0.5} lineCap="round" lineJoin="round" globalCompositeOperation={tool === "eraser" ? "destination-out" : "source-over"} listening={false} />}
+                      {strokes[l.id] && <KLine points={strokes[l.id]} stroke={tool === "eraser" ? "rgba(0,0,0,0.7)" : brushColor} strokeWidth={brushSize} opacity={tool === "eraser" ? 0.7 : brushOpacity} tension={0.5} lineCap="round" lineJoin="round" globalCompositeOperation={tool === "eraser" ? "destination-out" : "source-over"} {...(brushFeather ? { shadowForStrokeEnabled: true, shadowColor: tool === "eraser" ? "rgba(0,0,0,0.7)" : brushColor, shadowBlur: brushFeather, shadowOffsetX: 0, shadowOffsetY: 0 } : {})} listening={false} />}
                     </KLayer>
                   ))}
                   {/* 选区遮罩 + 套索预览（顶层，不导出） */}
@@ -1537,6 +1544,10 @@ export default function Workbench({ id, title, cover, docSize: initialDocSize }:
                         <KLine points={[cursor.x, cursor.y - 6 / zoom, cursor.x, cursor.y + 6 / zoom]} stroke="rgba(0,0,0,0.55)" strokeWidth={2.5 / zoom} listening={false} />
                         <KLine points={[cursor.x - 6 / zoom, cursor.y, cursor.x + 6 / zoom, cursor.y]} stroke="#fff" strokeWidth={1 / zoom} listening={false} />
                         <KLine points={[cursor.x, cursor.y - 6 / zoom, cursor.x, cursor.y + 6 / zoom]} stroke="#fff" strokeWidth={1 / zoom} listening={false} />
+                        {brushFeather > 0 && (
+                          <KCircle x={cursor.x} y={cursor.y} radius={(brushSize + brushFeather) / 2}
+                            stroke="rgba(255,255,255,0.45)" strokeWidth={1 / zoom} dash={[3 / zoom, 3 / zoom]} fill="rgba(0,0,0,0)" listening={false} />
+                        )}
                       </KGroup>
                     )}
                   </KLayer>

@@ -1,6 +1,6 @@
 export type ShapeNode =
   | { kind: "rect"; x: number; y: number; w: number; h: number; fill: string; opacity: number; cornerRadius: number; scaleX?: number; scaleY?: number }
-  | { kind: "line"; points: number[]; stroke: string; strokeWidth: number; opacity: number; tension: number; composite: string; x?: number; y?: number; scaleX?: number; scaleY?: number; isStroke?: boolean }
+  | { kind: "line"; points: number[]; stroke: string; strokeWidth: number; opacity: number; tension: number; composite: string; feather?: number; x?: number; y?: number; scaleX?: number; scaleY?: number; isStroke?: boolean }
   | { kind: "image"; x: number; y: number; w: number; h: number; src: string; opacity: number; scaleX?: number; scaleY?: number }
   | { kind: "text"; x: number; y: number; text: string; fontSize: number; fill: string; opacity: number; stroke?: string; strokeWidth?: number; scaleX?: number; scaleY?: number };
 
