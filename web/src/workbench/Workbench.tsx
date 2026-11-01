@@ -216,6 +216,8 @@ export default function Workbench({ id, title, cover, docSize: initialDocSize }:
   // 平移（PS 式）：空格+拖拽 或 中键拖拽
   const [spaceDown, setSpaceDown] = useState(false);
   const pan = useRef<{ sx: number; sy: number; ox: number; oy: number } | null>(null);
+  // window 级拖拽监听的卸载函数：保证按下后指针移出 Stage 也持续追踪
+  const detachDrag = useRef<null | (() => void)>(null);
   // zoom/scroll 的同步真相源：连续 wheel 事件间 React 来不及重渲染，
   // 若 setScroll 读闭包旧 scroll 而 setZoom 拿函数式新 z，两者错位会累积漂移。
   const zoomRef = useRef(zoom);
@@ -282,6 +284,16 @@ export default function Workbench({ id, title, cover, docSize: initialDocSize }:
     if (!st) return { x: 0, y: 0 };
     // getRelativePointerPosition 自动换算 Stage position+scale → 文档坐标
     return st.getRelativePointerPosition() ?? { x: 0, y: 0 };
+  };
+
+  // 由原生 client 坐标反算文档坐标：指针在 Stage 边界外也成立（不裁剪），
+  // 供 window 级拖拽监听在画布外持续追踪笔迹位置
+  const clientToStage = (clientX: number, clientY: number, z = zoom) => {
+    const st = stageRef.current;
+    if (!st) return { x: 0, y: 0 };
+    const el: any = (st as any).content;
+    const r = (typeof el === "function" ? el.call(st) : el).getBoundingClientRect();
+    return { x: (clientX - r.left) / z, y: (clientY - r.top) / z };
   };
 
   // 把当前画面在 1:1 文档坐标读成 ImageData（离屏 Konva 重建，采样精确）
@@ -906,7 +918,23 @@ export default function Workbench({ id, title, cover, docSize: initialDocSize }:
     setWandClicks(c => c + 1);
   };
 
+  // 按下后挂 window 监听：指针移出 Stage 期间持续追踪；在 Stage 内交给 Konva 自身事件（不重复打点）
+  const attachWindowDrag = () => {
+    const onMove = (ev: MouseEvent) => {
+      const st = stageRef.current; if (!st) return;
+      const ce: any = (st as any).content;
+      const r = (typeof ce === "function" ? ce.call(st) : ce).getBoundingClientRect();
+      if (ev.clientX >= r.left && ev.clientX <= r.right && ev.clientY >= r.top && ev.clientY <= r.bottom) return;
+      moveAt(ev.clientX, ev.clientY);
+    };
+    const onUp = () => { endStroke(); detachDrag.current?.(); detachDrag.current = null; };
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+    detachDrag.current = () => { window.removeEventListener("mousemove", onMove); window.removeEventListener("mouseup", onUp); };
+  };
+
   const onStageMouseDown = (e: any) => {
+    detachDrag.current?.();
     // 平移：空格+左键、中键、或抓手工具(move)左键
     const isMiddle = e.evt && e.evt.button === 1;
     const isMove = tool === "move";
@@ -918,6 +946,7 @@ export default function Workbench({ id, title, cover, docSize: initialDocSize }:
         if (!onTr) setSelShape(null);
       }
       pan.current = { sx: e.evt.clientX, sy: e.evt.clientY, ox: scroll.x, oy: scroll.y };
+      attachWindowDrag();
       return;
     }
     const p = toStage(e);
@@ -929,11 +958,12 @@ export default function Workbench({ id, title, cover, docSize: initialDocSize }:
       samAddPoint(p.x, p.y, isRight ? 0 : 1);
       return;
     }
-    if (tool === "lasso") { lassoPts.current = [{ x: p.x, y: p.y }]; drawing.current = true; return; }
-    if (tool === "rect" || tool === "ellipse") { setDragSel({ x0: p.x, y0: p.y, x1: p.x, y1: p.y }); drawing.current = true; return; }
+    if (tool === "lasso") { lassoPts.current = [{ x: p.x, y: p.y }]; drawing.current = true; attachWindowDrag(); return; }
+    if (tool === "rect" || tool === "ellipse") { setDragSel({ x0: p.x, y0: p.y, x1: p.x, y1: p.y }); drawing.current = true; attachWindowDrag(); return; }
     drawing.current = true;
     if (tool === "brush" || tool === "eraser") {
       pointRef.current = [p.x, p.y, p.x, p.y];
+      attachWindowDrag();
     } else if (tool === "fill") {
       // 有选区→对选区填当前色；无选区→铺满活动层
       if (selection) { applySelection(fillColor); }
@@ -947,15 +977,16 @@ export default function Workbench({ id, title, cover, docSize: initialDocSize }:
     }
   };
 
-  const onStageMouseMove = (e: any) => {
+  // 统一的拖拽移动（由 client 坐标驱动；指针在画布外同样有效）
+  const moveAt = (clientX: number, clientY: number) => {
     // 平移中：按拖拽位移更新 scroll（屏幕像素 / zoom = 文档像素）
     if (pan.current) {
-      const dx = e.evt.clientX - pan.current.sx;
-      const dy = e.evt.clientY - pan.current.sy;
+      const dx = clientX - pan.current.sx;
+      const dy = clientY - pan.current.sy;
       setScroll({ x: pan.current.ox - dx / zoom, y: pan.current.oy - dy / zoom });
       return;
     }
-    const p = toStage(e);
+    const p = clientToStage(clientX, clientY);
     setCursor({ x: p.x, y: p.y });
     if (!drawing.current) return;
     if (tool === "lasso") { lassoPts.current.push({ x: p.x, y: p.y }); setLassoLive([...lassoPts.current]); return; }
@@ -964,6 +995,10 @@ export default function Workbench({ id, title, cover, docSize: initialDocSize }:
       pointRef.current = [...pointRef.current, p.x, p.y];
       setStrokes(s => ({ ...s, [activeLayer]: pointRef.current }));
     }
+  };
+
+  const onStageMouseMove = (e: any) => {
+    moveAt(e.evt.clientX, e.evt.clientY);
   };
 
   const endStroke = () => {
@@ -1430,7 +1465,6 @@ export default function Workbench({ id, title, cover, docSize: initialDocSize }:
                   onMouseDown={onStageMouseDown}
                   onMouseMove={onStageMouseMove}
                   onMouseUp={endStroke}
-                  onMouseLeave={endStroke}
                   onContextMenu={(e: any) => { e.evt.preventDefault(); }}
                   style={{ position: "absolute", inset: 0 }}
                 >
