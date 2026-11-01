@@ -171,6 +171,7 @@ export default function Workbench({ id, title, cover, docSize: initialDocSize }:
   const [selCanvas, setSelCanvas] = useState<HTMLCanvasElement | null>(null);
   const [fillColor, setFillColor] = useState("#3c9be8");
   const [brushColor, setBrushColor] = useState("#1c1a17");
+  useEffect(() => { (window as any).__brushColor = brushColor; }, [brushColor]);
   const [brushSize, setBrushSize] = useState(8);
   const [brushFeather, setBrushFeather] = useState(0);
   const [brushOpacity, setBrushOpacity] = useState(1);
@@ -215,6 +216,7 @@ export default function Workbench({ id, title, cover, docSize: initialDocSize }:
   const layerRefs = useRef<Record<string, Konva.Layer>>({});
   // 平移（PS 式）：空格+拖拽 或 中键拖拽
   const [spaceDown, setSpaceDown] = useState(false);
+  const [altDown, setAltDown] = useState(false);
   const pan = useRef<{ sx: number; sy: number; ox: number; oy: number } | null>(null);
   // window 级拖拽监听的卸载函数：保证按下后指针移出 Stage 也持续追踪
   const detachDrag = useRef<null | (() => void)>(null);
@@ -267,12 +269,13 @@ export default function Workbench({ id, title, cover, docSize: initialDocSize }:
       const t = e.target as HTMLElement | null;
       if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable)) return;
       if (e.code === "Space") { e.preventDefault(); setSpaceDown(true); return; }
+      if (e.key === "Alt") { setAltDown(true); }
       if (e.key === "Escape") { clearSel(); lassoPts.current = []; setLassoLive([]); setTextDraft(null); setSelShape(null); }
       if ((e.key === "Delete" || e.key === "Backspace") && selShapeRef.current) { e.preventDefault(); deleteSelShape(); }
       if ((e.ctrlKey || e.metaKey) && (e.key === "z" || e.key === "Z")) { e.preventDefault(); if (e.shiftKey) redo(); else undo(); }
       else if ((e.ctrlKey || e.metaKey) && (e.key === "y" || e.key === "Y")) { e.preventDefault(); redo(); }
     };
-    const onKeyUp = (e: KeyboardEvent) => { if (e.code === "Space") setSpaceDown(false); };
+    const onKeyUp = (e: KeyboardEvent) => { if (e.code === "Space") setSpaceDown(false); if (e.key === "Alt") setAltDown(false); };
     el.addEventListener("wheel", onWheel, { passive: false });
     window.addEventListener("keydown", onKey);
     window.addEventListener("keyup", onKeyUp);
@@ -476,6 +479,21 @@ export default function Workbench({ id, title, cover, docSize: initialDocSize }:
   };
   // 智能色异步结果 + 用户是否手动改过色：commitText 时据此定最终色（防采样未回的竞态）
   const autoContrast = useRef<{ p: Promise<string> } | null>(null);
+
+  // 吸管：拾取单点精确像素色 → #rrggbb（落点全透明时按白底合成）
+  const pickColorAt = async (x: number, y: number): Promise<string | null> => {
+    try {
+      const idata = await stageToImageData();
+      if (!idata) return null;
+      const xx = Math.round(x), yy = Math.round(y);
+      if (xx < 0 || yy < 0 || xx >= idata.width || yy >= idata.height) return null;
+      const i = (yy * idata.width + xx) * 4;
+      let r = idata.data[i], g = idata.data[i + 1], b = idata.data[i + 2], a = idata.data[i + 3];
+      if (a === 0) { r = 255; g = 255; b = 255; }            // 全透明白底
+      else if (a < 255) { r = Math.round(r * a / 255 + 255 * (1 - a / 255)); g = Math.round(g * a / 255 + 255 * (1 - a / 255)); b = Math.round(b * a / 255 + 255 * (1 - a / 255)); }
+      return "#" + [r, g, b].map(v => v.toString(16).padStart(2, "0")).join("");
+    } catch { return null; }
+  };
   const colorTouched = useRef(false);
 
   // 双击重编辑已有文字：浮层回填原文/颜色/字号
@@ -950,6 +968,12 @@ export default function Workbench({ id, title, cover, docSize: initialDocSize }:
       return;
     }
     const p = toStage(e);
+    // 画笔自带吸管：画笔工具下按住 Alt 点击 = 拾取该点颜色（不切换工具）
+    if (tool === "brush" && e.evt?.altKey) {
+      e.evt.preventDefault();
+      pickColorAt(p.x, p.y).then(c => { if (c) { setBrushColor(c); colorTouched.current = true; } });
+      return;
+    }
     if (tool === "wand") { onWand(p.x, p.y); return; }
     if (tool === "sam") {
       // 全景叠图模式下：点击抠出元素；否则官方点选范式（左键前景/右键背景）
@@ -1392,6 +1416,9 @@ export default function Workbench({ id, title, cover, docSize: initialDocSize }:
                 <span className="w-8 text-right tabular-nums text-foreground/50">{Math.round(brushOpacity * 100)}%</span>
               </label>
             )}
+            {tool === "brush" && (
+              <span className="text-foreground/40" title="按住 Alt 在画布上点击，拾取该处颜色">Alt+点击 取色</span>
+            )}
           </>
         ) : tool === "move" && selShape ? (
           <>
@@ -1446,7 +1473,7 @@ export default function Workbench({ id, title, cover, docSize: initialDocSize }:
               <Ruler zoom={zoom} origin={originY} length={viewH} dir="v" />
             </div>
             <div ref={vpRef} className="relative min-w-0 flex-1 overflow-hidden"
-              style={{ background: "oklch(0.14 0.005 260)", cursor: spaceDown || tool === "move" ? "grab" : tool === "wand" || tool === "lasso" || tool === "sam" ? "crosshair" : tool === "brush" || tool === "eraser" ? "none" : "default" }}
+              style={{ background: "oklch(0.14 0.005 260)", cursor: spaceDown || tool === "move" ? "grab" : tool === "wand" || tool === "lasso" || tool === "sam" ? "crosshair" : tool === "brush" && (altDown) ? "crosshair" : tool === "brush" || tool === "eraser" ? "none" : "default" }}
               onDragEnter={(e) => { e.preventDefault(); setDragOver(true); }}
               onDragOver={(e) => e.preventDefault()}
               onDragLeave={(e) => { e.preventDefault(); setDragOver(false); }}
