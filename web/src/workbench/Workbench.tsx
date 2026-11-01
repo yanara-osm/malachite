@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Stage, Layer as KLayer, Rect as KRect, Line as KLine, Image as KImage, Text as KText, Circle as KCircle, Ellipse as KEllipse, Transformer as KTransformer } from "react-konva";
+import { Stage, Layer as KLayer, Rect as KRect, Line as KLine, Image as KImage, Text as KText, Circle as KCircle, Ellipse as KEllipse, Group as KGroup, Transformer as KTransformer } from "react-konva";
 import Konva from "konva";
 import dynamic from "next/dynamic";
 import Link from "next/link";
@@ -988,7 +988,7 @@ export default function Workbench({ id, title, cover, docSize: initialDocSize }:
       const pts = pointRef.current;
       setLayers(ls => ls.map(l => l.id === activeLayer
         // 笔迹必须追加到数组尾（层内最上层）：橡皮 destination-out 要先有像素才能擦，插到开头会被下方图像重新盖住
-        ? { ...l, shapes: [...l.shapes, { kind: "line", points: pts, stroke: tool === "eraser" ? "rgba(0,0,0,1)" : brushColor, strokeWidth: brushSize, opacity: tool === "eraser" ? 1 : brushOpacity, tension: 0.5, composite: tool === "eraser" ? "destination-out" : "source-over" }] }
+        ? { ...l, shapes: [...l.shapes, { kind: "line", points: pts, stroke: tool === "eraser" ? "rgba(0,0,0,1)" : brushColor, strokeWidth: brushSize, opacity: tool === "eraser" ? 1 : brushOpacity, tension: 0.5, composite: tool === "eraser" ? "destination-out" : "source-over", isStroke: true }] }
         : l));
       setStrokes(s => { const n = { ...s }; delete n[activeLayer]; return n; });
       pointRef.current = [];
@@ -1404,7 +1404,7 @@ export default function Workbench({ id, title, cover, docSize: initialDocSize }:
               <Ruler zoom={zoom} origin={originY} length={viewH} dir="v" />
             </div>
             <div ref={vpRef} className="relative min-w-0 flex-1 overflow-hidden"
-              style={{ background: "oklch(0.14 0.005 260)", cursor: spaceDown || tool === "move" ? "grab" : tool === "wand" || tool === "lasso" || tool === "sam" ? "crosshair" : tool === "brush" || tool === "eraser" ? "cell" : "default" }}
+              style={{ background: "oklch(0.14 0.005 260)", cursor: spaceDown || tool === "move" ? "grab" : tool === "wand" || tool === "lasso" || tool === "sam" ? "crosshair" : tool === "brush" || tool === "eraser" ? "none" : "default" }}
               onDragEnter={(e) => { e.preventDefault(); setDragOver(true); }}
               onDragOver={(e) => e.preventDefault()}
               onDragLeave={(e) => { e.preventDefault(); setDragOver(false); }}
@@ -1526,9 +1526,18 @@ export default function Workbench({ id, title, cover, docSize: initialDocSize }:
                         stroke="oklch(0.85 0.12 190)" strokeWidth={1.5 / zoom} dash={[6 / zoom, 4 / zoom]} fill="rgba(60,220,205,0.12)" listening={false} />
                     )}
                     {(tool === "brush" || tool === "eraser") && cursor && (
-                      <KCircle x={cursor.x} y={cursor.y} radius={brushSize / 2}
-                        stroke={tool === "brush" ? brushColor : "rgba(255,255,255,0.8)"} strokeWidth={1 / zoom}
-                        fill="rgba(0,0,0,0)" listening={false} />
+                      <KGroup listening={false}>
+                        {/* 笔刷光标：外圈=笔迹粗细；中心小十字=落点（屏幕尺寸恒定，不随缩放/笔径变大）。深色描边垫底保证深浅底色上都可见 */}
+                        <KCircle x={cursor.x} y={cursor.y} radius={brushSize / 2}
+                          stroke="rgba(0,0,0,0.55)" strokeWidth={2.5 / zoom} fill="rgba(0,0,0,0)" listening={false} />
+                        <KCircle x={cursor.x} y={cursor.y} radius={brushSize / 2}
+                          stroke={tool === "brush" ? brushColor : "rgba(255,255,255,0.9)"} strokeWidth={1 / zoom}
+                          fill="rgba(0,0,0,0)" listening={false} />
+                        <KLine points={[cursor.x - 6 / zoom, cursor.y, cursor.x + 6 / zoom, cursor.y]} stroke="rgba(0,0,0,0.55)" strokeWidth={2.5 / zoom} listening={false} />
+                        <KLine points={[cursor.x, cursor.y - 6 / zoom, cursor.x, cursor.y + 6 / zoom]} stroke="rgba(0,0,0,0.55)" strokeWidth={2.5 / zoom} listening={false} />
+                        <KLine points={[cursor.x - 6 / zoom, cursor.y, cursor.x + 6 / zoom, cursor.y]} stroke="#fff" strokeWidth={1 / zoom} listening={false} />
+                        <KLine points={[cursor.x, cursor.y - 6 / zoom, cursor.x, cursor.y + 6 / zoom]} stroke="#fff" strokeWidth={1 / zoom} listening={false} />
+                      </KGroup>
                     )}
                   </KLayer>
                 </KonvaStage>
@@ -1618,30 +1627,43 @@ export default function Workbench({ id, title, cover, docSize: initialDocSize }:
                       <button title="删除图层" onClick={(e) => { e.stopPropagation(); deleteLayer(l.id); }} className="px-1 text-[10px] text-foreground/40 hover:text-red-400">✕</button>
                     </div>
                   </div>
-                  {/* 图层内素材子行（仿 PS 智能对象展开）：文字/图片/形状/线条各自可点选、删除 */}
-                  {l.shapes.length > 0 && (
-                    <div className="ml-4 mt-0.5 space-y-0.5 border-l border-border/60 pl-2">
-                      {[...l.shapes].map((s, i) => ({ s, i })).reverse().map(({ s, i }) => {
-                        const sel = selShape && selShape.layer === l.id && selShape.index === i;
-                        const meta = s.kind === "text" ? { icon: "T", name: s.text.slice(0, 12) || "文字" }
-                          : s.kind === "image" ? { icon: "▨", name: "图片" }
-                          : s.kind === "rect" ? { icon: "▭", name: "形状" }
-                          : { icon: "〰", name: "线条" };
-                        return (
-                          <div key={i}
-                            onClick={() => { setActiveLayer(l.id); setTool("move"); setSelShape({ layer: l.id, index: i }); }}
-                            onDoubleClick={() => { if (s.kind === "text") { setSelShape(null); editTextAt(l.id, i); } }}
-                            title={s.kind === "text" ? "双击重编辑文字" : "点选后可在画布上变换"}
-                            className={`group flex cursor-pointer items-center gap-1.5 rounded px-1.5 py-1 text-[11px] transition ${sel ? "bg-foreground/15 text-foreground" : "text-foreground/55 hover:bg-foreground/5"}`}>
-                            <span className="w-3 shrink-0 text-center text-[10px] text-foreground/40">{meta.icon}</span>
-                            <span className="flex-1 truncate">{meta.name}</span>
-                            <button title="删除素材" onClick={(e) => { e.stopPropagation(); pushUndo(); setLayers(ls => ls.map(ll => ll.id === l.id ? { ...ll, shapes: ll.shapes.filter((_, ii) => ii !== i) } : ll)); if (sel) setSelShape(null); }}
+                  {/* 图层内素材子行（仿 PS 智能对象展开）：文字/图片/形状可点选删除；笔迹合为一条（画图是往层上涂，不是每笔一个素材） */}
+                  {l.shapes.length > 0 && (() => {
+                    const strokeIdx = l.shapes.map((s, i) => ({ s, i })).filter(({ s }) => s.kind === "line" && s.isStroke);
+                    const others = l.shapes.map((s, i) => ({ s, i })).filter(({ s }) => !(s.kind === "line" && s.isStroke)).reverse();
+                    return (others.length || strokeIdx.length) ? (
+                      <div className="ml-4 mt-0.5 space-y-0.5 border-l border-border/60 pl-2">
+                        {strokeIdx.length > 0 && (
+                          <div className="group flex items-center gap-1.5 rounded px-1.5 py-1 text-[11px] text-foreground/55"
+                            title="笔迹属于该图层本身（如同纸上的笔迹），随层移动/删除">
+                            <span className="w-3 shrink-0 text-center text-[10px] text-foreground/40">✎</span>
+                            <span className="flex-1 truncate">笔迹 · {strokeIdx.length} 笔</span>
+                            <button title="清除该层全部笔迹" onClick={(e) => { e.stopPropagation(); pushUndo(); setLayers(ls => ls.map(ll => ll.id === l.id ? { ...ll, shapes: ll.shapes.filter(ss => !(ss.kind === "line" && ss.isStroke)) } : ll)); }}
                               className="hidden text-[10px] text-foreground/40 hover:text-red-400 group-hover:block">✕</button>
                           </div>
-                        );
-                      })}
-                    </div>
-                  )}
+                        )}
+                        {others.map(({ s, i }) => {
+                          const sel = selShape && selShape.layer === l.id && selShape.index === i;
+                          const meta = s.kind === "text" ? { icon: "T", name: s.text.slice(0, 12) || "文字" }
+                            : s.kind === "image" ? { icon: "▨", name: "图片" }
+                            : s.kind === "rect" ? { icon: "▭", name: "形状" }
+                            : { icon: "〰", name: "线条" };
+                          return (
+                            <div key={i}
+                              onClick={() => { setActiveLayer(l.id); setTool("move"); setSelShape({ layer: l.id, index: i }); }}
+                              onDoubleClick={() => { if (s.kind === "text") { setSelShape(null); editTextAt(l.id, i); } }}
+                              title={s.kind === "text" ? "双击重编辑文字" : "点选后可在画布上变换"}
+                              className={`group flex cursor-pointer items-center gap-1.5 rounded px-1.5 py-1 text-[11px] transition ${sel ? "bg-foreground/15 text-foreground" : "text-foreground/55 hover:bg-foreground/5"}`}>
+                              <span className="w-3 shrink-0 text-center text-[10px] text-foreground/40">{meta.icon}</span>
+                              <span className="flex-1 truncate">{meta.name}</span>
+                              <button title="删除素材" onClick={(e) => { e.stopPropagation(); pushUndo(); setLayers(ls => ls.map(ll => ll.id === l.id ? { ...ll, shapes: ll.shapes.filter((_, ii) => ii !== i) } : ll)); if (sel) setSelShape(null); }}
+                                className="hidden text-[10px] text-foreground/40 hover:text-red-400 group-hover:block">✕</button>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ) : null;
+                  })()}
                 </div>
               ))}
             </div>

@@ -27,6 +27,7 @@ try:
         if r.get("exceptionDetails"): raise RuntimeError("JS: "+json.dumps(r["exceptionDetails"])[:400])
         return r["result"].get("value")
     send("Runtime.enable"); send("Page.enable")
+    send("Page.navigate",url="http://localhost:3000/projects"); time.sleep(4)
     print("seed:", js("(() => { localStorage.clear(); const c=document.createElement('canvas'); c.width=800; c.height=600; const g=c.getContext('2d'); g.fillStyle='red'; g.fillRect(0,0,800,600); const d=c.toDataURL('image/png'); localStorage.setItem('malachite:dragprojects', JSON.stringify([{id:'dErase',title:'erasetest',img:d,thumb:d,w:800,h:600,docSize:{w:800,h:600},createdAt:1}])); return 'ok'; })()"))
     send("Page.navigate",url="http://localhost:3000/project?id=dErase")
     time.sleep(6)
